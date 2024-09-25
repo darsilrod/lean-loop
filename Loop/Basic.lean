@@ -41,19 +41,16 @@ def example_1 : Program :=
 def VarState := List Nat
 
 
-def value_at : VarState → Nat → Nat
-  | xs, n => xs.getD n 0
+def value_at (xs : VarState) (k : Nat) : Nat := xs.getD k 0
 
 example : value_at [3, 1, 5] 2 = 5 := rfl
 example : value_at [3, 1, 5] 7 = 0 := rfl
 
-def clear_value : VarState → Nat → VarState
-  | xs, n => xs.set n 0
+def clear_value (xs : VarState) (k : Nat) : VarState := xs.set k 0
 
 example : clear_value [3, 1, 5] 2 = [3, 1, 0] := rfl
 
-def inc_value : VarState → Nat → VarState
-  | xs, n => xs.set n (value_at xs n + 1)
+def inc_value (xs : VarState) (k : Nat) : VarState := xs.set k (value_at xs k + 1)
 
 example : inc_value [3, 1, 5] 2 = [3, 1, 6] := by rfl
 
@@ -90,7 +87,7 @@ def execution_from_state (xs : VarState) (p : Program) : VarState :=
   | .loop_var k inner :: tail =>
     execution_from_state (loop_n_times (value_at xs k) xs inner) tail
 termination_by (lines_of_code p, 0)
-open execution_from_state.loop_n_times
+open execution_from_state
 
 
 def nary_program_function (p : Program) (n : Nat) (v : Mathlib.Vector Nat n) : Nat :=
@@ -106,16 +103,16 @@ def loop_computable (f : Mathlib.Vector Nat n → Nat) : Prop :=
   ∃ p : Program, ⟦ p ⟧^(n) = f
 
 -- -- -------
--- def highest_var : Program → Nat
---   | [] => 0
---   | clear_var k :: tail =>
---     have : lines_of_code tail < lines_of_code (clear_var k :: tail) := by simp
---     max k (highest_var tail)
---   | increment_var k :: tail =>
---     have : lines_of_code tail < lines_of_code (increment_var k :: tail) := by simp
---     max k (highest_var tail)
---   | loop_var k inner :: tail =>
---     have : lines_of_code inner < lines_of_code (loop_var k inner :: tail) := by simp_arith
---     have : lines_of_code tail < lines_of_code (loop_var k inner :: tail) := by simp_arith
---     max k (max (highest_var inner) (highest_var tail))
--- termination_by p => lines_of_code p
+def highest_var : Program → Nat
+  | [] => 0
+  | clear_var k :: tail =>
+    have : lines_of_code tail < lines_of_code (clear_var k :: tail) := by simp
+    max k (highest_var tail)
+  | increment_var k :: tail =>
+    have : lines_of_code tail < lines_of_code (increment_var k :: tail) := by simp
+    max k (highest_var tail)
+  | loop_var k inner :: tail =>
+    have : lines_of_code inner < lines_of_code (loop_var k inner :: tail) := by simp_arith
+    have : lines_of_code tail < lines_of_code (loop_var k inner :: tail) := by simp_arith
+    max k (max (highest_var inner) (highest_var tail))
+termination_by p => lines_of_code p
