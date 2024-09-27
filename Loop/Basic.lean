@@ -4,7 +4,9 @@ Authors: Darío Silva Rodríguez
 -/
 
 import Mathlib.Data.Vector.Defs
+import Mathlib.Data.Vector.Basic
 import Mathlib.Data.List.Basic
+import Mathlib.Computability.Primrec
 
 /-!
 # The Loop programming language
@@ -113,6 +115,7 @@ theorem inc_value_nil_succ : inc_value [] (n + 1) = 0 :: inc_value [] n := rfl
 theorem inc_value_cons_zero : inc_value (x :: xs) 0 = (x + 1) :: xs := rfl
 theorem inc_value_cons_succ : inc_value (x :: xs) (n + 1) = x :: inc_value xs n := rfl
 
+theorem concat_is_seq_execution {p p' : Program} : p ++ p' = seq_execution p p' := by rfl
 
 theorem value_at_zeros_is_zero (n k : Nat) : value_at (List.zeros n) k = 0 := by
   revert n
@@ -166,15 +169,11 @@ theorem inc_value_increments_value (xs : VarState) :
     case succ n n_ih =>
       simp [inc_value, value_at_nil]
       intro k
-      induction k
-
-      case zero =>
-        simp [value_at_cons_zero]
-      case succ k k_ih =>
-        simp [value_at_cons_succ]
+      cases k
+      · simp [value_at_cons_zero]
+      · simp [value_at_cons_succ]
         simp [value_at_nil] at n_ih
         exact n_ih
-
   case cons x xs xs_ih =>
     intro n
     cases n
@@ -185,6 +184,16 @@ theorem inc_value_increments_value (xs : VarState) :
       intro k
       cases k <;> simp [value_at_cons_zero, value_at_cons_succ, xs_ih]
 
+theorem loop_inc_adds_value :
+    execution_from_state (x :: xs) (LOOP X n DO INC X 0 END) = (x + value_at (x :: xs) n) :: xs := by
+  simp [execution_from_state]
+  generalize value_at (x :: xs) n = k
+  revert x
+  induction k
+  case zero =>
+    simp [loop_n_times]
+  case succ k k_ih =>
+    simp_arith [loop_n_times, execution_from_state, inc_value, k_ih]
 
 theorem same_values_same_execution (p : Program) (xs ys : VarState) :
     (∀ k : Nat, value_at xs k = value_at ys k) → ∀ k : Nat, value_at (execution_from_state xs p) k = value_at (execution_from_state ys p) k := by
@@ -236,3 +245,45 @@ theorem loop_computable_cleanly_is_loop_computable : loop_computable_cleanly f �
                 _ = value_at (execution_from_state (init_state v ++ List.zeros dif) p) 0 := by rw [append_zeros_does_not_change_execution ]
                 _ = value_at (f v :: v.toList ++ List.zeros dif) 0 := by rw [h v]
                 _ = f v := by rfl
+
+---
+def zero_fun_vect : Mathlib.Vector Nat 0 → Nat := fun _ => 0
+
+theorem zero_is_loop_computable_cleanly : loop_computable_cleanly zero_fun_vect := by
+  let p := CLEAR X 0
+  exists p
+  intro v
+  simp [init_state, highest_var, p, execution_from_state, clear_value, zero_fun_vect]
+
+def succ_fun_vect : Mathlib.Vector Nat 1 → Nat := fun v => v.head + 1
+
+theorem succ_is_loop_computable_cleanly : loop_computable_cleanly succ_fun_vect := by
+  let p₁ :=
+    LOOP X 1 DO
+      INC X 0
+    END
+  let p₂ := INC X 0
+
+  let p := p₁ ++ p₂
+
+  exists p
+  intro v
+  simp [init_state, succ_fun_vect, highest_var]
+  exact calc
+    execution_from_state [0, v.head] p
+      =
+    inc_value (execution_from_state [0, v.head] p₁) 0 := by simp [p, concat_is_seq_execution, execution_from_state, p₂]
+    _ =
+    inc_value [v.head, v.head] 0 := by simp [p₁, loop_inc_adds_value, value_at]
+    _ = [v.head + 1, v.head] := by simp [inc_value]
+
+theorem get_is_loop_computable_cleanly (i : Fin n) : loop_computable_cleanly (fun v => v.get i) := by
+  let p :=
+    LOOP X i + 1 DO
+      INC X 0
+    END
+  exists p
+  intro v
+  have : i + 1 - n = 0 := by exact Nat.sub_eq_zero_iff_le.2 i.isLt
+  simp [init_state, highest_var, this, p, execution_from_state,
+    loop_inc_adds_value, value_at_cons_succ, value_at, Mathlib.Vector.get_eq_get]
