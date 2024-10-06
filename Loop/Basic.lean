@@ -16,6 +16,8 @@ programming language, define what Loop-computable functions are, and prove that
 Loop-computable is the same as primitive recursive.
 -/
 
+abbrev VectNat := Mathlib.Vector Nat
+
 namespace Loop
 
 
@@ -62,7 +64,7 @@ def inc_value : VarState → Nat → VarState
 example : inc_value [3, 1, 5] 2 = [3, 1, 6] := by rfl
 -- example : inc_value [3, 1, 5] 4 = [3, 1, 5, 0, 1] := by rfl
 
-def init_state (v : Mathlib.Vector Nat n) : VarState := 0 :: v.toList
+def init_state (v : VectNat n) : VarState := 0 :: v.toList
 
 def execution_from_state (xs : VarState) (p : Program) : VarState :=
   let rec loop_n_times : Nat → VarState → Program → VarState
@@ -75,7 +77,7 @@ def execution_from_state (xs : VarState) (p : Program) : VarState :=
   | seq_execution p p' => execution_from_state (execution_from_state xs p) p'
 open execution_from_state
 
-def nary_program_function (p : Program) (n : Nat) (v : Mathlib.Vector Nat n) : Nat :=
+def nary_program_function (p : Program) (n : Nat) (v : VectNat n) : Nat :=
   value_at (execution_from_state (init_state v) p) 0
 
 notation "⟦ " p " ⟧^(" n ") " => nary_program_function p n
@@ -83,7 +85,7 @@ notation "⟦ " p " ⟧^(" n ") " => nary_program_function p n
 example : ⟦ example_1 ⟧^(2) ⟨[23, 4], rfl⟩ = 27 := by
   simp [nary_program_function, init_state, example_1, execution_from_state, loop_n_times, value_at, inc_value, clear_value, HAppend.hAppend, Append.append]
 
-def loop_computable (f : Mathlib.Vector Nat n → Nat) : Prop :=
+def loop_computable (f : VectNat n → Nat) : Prop :=
   ∃ p : Program, ⟦ p ⟧^(n) = f
 
 -- -- -------
@@ -95,12 +97,15 @@ def highest_var : Program → Nat
 
 abbrev List.zeros (n : Nat) : List Nat := List.replicate n 0
 
--- /- A function is loop computable cleanly if it does not modify the initial state,. -/
-def loop_computable_cleanly (f : Mathlib.Vector Nat n → Nat) : Prop :=
-  ∃ p : Program, ∀ v : Mathlib.Vector Nat n,
+abbrev cleanly_computes (p : Program) (f : VectNat n → Nat) : Prop :=
+  ∀ v : VectNat n,
     execution_from_state (init_state v ++ List.zeros (highest_var p - n)) p
     =
     f v :: v.toList ++ List.zeros (highest_var p - n)
+
+-- /- A function is loop computable cleanly if it does not modify the initial state,. -/
+def loop_computable_cleanly (f : VectNat n → Nat) : Prop :=
+  ∃ p : Program, cleanly_computes p f
 
 theorem value_at_nil : value_at [] n = 0 := rfl
 theorem value_at_cons_zero : value_at (x :: xs) 0 = x := rfl
@@ -246,8 +251,289 @@ theorem loop_computable_cleanly_is_loop_computable : loop_computable_cleanly f �
                 _ = value_at (f v :: v.toList ++ List.zeros dif) 0 := by rw [h v]
                 _ = f v := by rfl
 
+theorem clear_value_clears_succ_largest_index (xs : VarState) (l_h : xs.length ≥ k + 1) :
+    clear_value (xs ++ ys) k = (clear_value xs k) ++ ys := by
+  revert k
+  induction xs
+  case nil =>
+    intro k h
+    absurd h
+    exact Nat.not_succ_le_zero k
+  case cons x xs xs_ih =>
+    intro k
+    cases k
+    case zero =>
+      simp [clear_value]
+    case succ k =>
+      simp [clear_value_cons_succ]
+      exact xs_ih
+
+theorem inc_value_increments_succ_largest_index (xs : VarState) (l_h : xs.length ≥ k + 1) :
+    inc_value (xs ++ ys) k = (inc_value xs k) ++ ys := by
+  revert k
+  induction xs
+  case nil =>
+    intro k h
+    absurd h
+    exact Nat.not_succ_le_zero k
+  case cons x xs xs_ih =>
+      intro k
+      cases k
+      case zero =>
+        simp [inc_value]
+      case succ k =>
+        simp [inc_value_cons_succ]
+        exact xs_ih
+
+theorem value_at_first_k (v : VectNat n) (n_h : n > k) :
+    value_at (v.toList ++ xs) k = value_at v.toList k := by
+  revert k
+  induction n
+  case zero =>
+    intro k k_h
+    absurd k_h
+    have : ¬0 > k := by simp
+    exact this
+  case succ n n_ih =>
+    let ⟨ys, ys_l⟩ := v
+    simp
+    cases ys
+    case nil =>
+      intros
+      have : ¬0 ≥ 1 := by simp
+      absurd this
+      have : 0 ≥ 1 := by calc
+        0 = n + 1 := ys_l
+        _ ≥ 1 := by simp
+      exact this
+    case cons y ys =>
+      intro k k_h
+      have tail_l : ys.length = n := by
+        rw [List.length] at ys_l
+        exact Nat.succ_injective ys_l
+      cases k
+      case zero =>
+        simp [value_at_cons_zero]
+      case succ k =>
+        simp [value_at_cons_succ]
+        have : k < n := Nat.lt_of_succ_lt_succ k_h
+        have := n_ih ⟨ys, tail_l⟩ this
+        simp at this
+        assumption
+
+theorem execution_from_state_long_enough_preserves_length (p : Program) (v : VectNat n) (n_h : n ≥ highest_var p + 1) :
+    (execution_from_state v.toList p).length = n := by
+  revert n
+  induction p
+  case clear_var k =>
+    induction k
+    case zero =>
+      intro n v n_h
+      simp [highest_var] at n_h
+      cases n
+      case zero =>
+        absurd n_h
+        have : ¬1 ≤ 0 := by simp
+        exact this
+      case succ n =>
+        let ⟨x :: xs, xs_l⟩ := v
+        simp at xs_l
+        simp [execution_from_state, clear_value, xs_l]
+    case succ k k_ih =>
+      intro n v n_h
+      simp [highest_var] at n_h
+      cases n
+      case zero =>
+        have : 1 ≤ 0 := by
+          have : 1 ≤ k + 1 + 1 := by simp
+          exact Nat.le_trans this n_h
+        absurd this
+        have : ¬1 ≤ 0 := by simp
+        exact this
+      case succ n =>
+        simp at n_h
+        let ⟨x :: xs, xs_l⟩ := v
+        simp [execution_from_state, clear_value_cons_succ]
+        simp at xs_l
+        have := k_ih ⟨xs, xs_l⟩ n_h
+        simp [execution_from_state] at this
+        assumption
+
+  case increment_var k =>
+    induction k
+    case zero =>
+      intro n v n_h
+      simp [highest_var] at n_h
+      cases n
+      case zero =>
+        absurd n_h
+        have : ¬1 ≤ 0 := by simp
+        exact this
+      case succ n =>
+        let ⟨x :: xs, xs_l⟩ := v
+        simp at xs_l
+        simp [execution_from_state, inc_value, xs_l]
+    case succ k k_ih =>
+      intro n v n_h
+      simp [highest_var] at n_h
+      cases n
+      case zero =>
+        have : 1 ≤ 0 := by
+          have : 1 ≤ k + 1 + 1 := by simp
+          exact Nat.le_trans this n_h
+        absurd this
+        have : ¬1 ≤ 0 := by simp
+        exact this
+      case succ n =>
+        simp at n_h
+        let ⟨x :: xs, xs_l⟩ := v
+        simp [execution_from_state, inc_value_cons_succ]
+        simp at xs_l
+        have := k_ih ⟨xs, xs_l⟩ n_h
+        simp [execution_from_state] at this
+        assumption
+
+  case loop_var k inner inner_ih =>
+    simp [execution_from_state]
+    intro n v
+    generalize value_at v.toList k = m
+    revert n v
+    induction m
+    case zero =>
+      simp [loop_n_times]
+    case succ m m_ih =>
+      intro n v n_h
+      simp [loop_n_times]
+      let ys := execution_from_state v.toList inner
+      simp [highest_var] at n_h
+      have ineq : highest_var inner + 1 ≤ n := by
+        have : highest_var inner + 1 ≤ max k (highest_var inner) + 1 := by simp
+        exact Nat.le_trans this n_h
+      have := inner_ih v ineq
+      let w' : VectNat n := ⟨ys, this⟩
+      have : execution_from_state v.toList inner = w'.toList := rfl
+      rw [this]
+      exact m_ih w' n_h
+
+  case seq_execution p p' p_ih p'_ih =>
+    intro n v n_h
+    let ys := execution_from_state v.toList p
+    have : n ≥ highest_var p + 1 := by
+      rw [highest_var] at n_h
+      have : max (highest_var p) (highest_var p') + 1 ≥ highest_var p + 1 := by simp
+      exact Nat.le_trans this n_h
+    have := p_ih v this
+    let w' : VectNat n := ⟨ys, this⟩
+    simp [execution_from_state]
+    have : execution_from_state v.toList p = w'.toList := rfl
+    rw [this]
+    have : n ≥ highest_var p' + 1 := by
+      rw [highest_var] at n_h
+      have : max (highest_var p) (highest_var p') + 1 ≥ highest_var p' + 1 := by simp
+      exact Nat.le_trans this n_h
+    exact p'_ih w' this
+
+theorem execution_from_state_ge_highest_append (v : VectNat n) (n_h : n ≥ highest_var p) :
+    execution_from_state (init_state v ++ xs) p = (execution_from_state (init_state v) p) ++ xs := by
+  suffices g : (w : VectNat (n + 1)) →  execution_from_state (w.toList ++ xs) p = (execution_from_state w.toList p) ++ xs from by
+    let w : VectNat (n + 1) := ⟨0 :: v.toList, by simp⟩
+    exact g w
+  revert n
+  induction p
+  case clear_var k =>
+    intro n _ n_h w
+    simp [execution_from_state]
+    have : w.toList.length ≥ k + 1 := by
+      have : k ≤ n := by  simp [highest_var] at n_h; assumption
+      simp_arith [this]
+    exact clear_value_clears_succ_largest_index w.toList this
+  case increment_var k =>
+    intro n _ n_h w
+    simp [execution_from_state]
+    have : w.toList.length ≥ k + 1 := by
+      have : k ≤ n := by simp [highest_var] at n_h; assumption
+      simp_arith [this]
+    exact inc_value_increments_succ_largest_index w.toList this
+  case loop_var k inner inner_ih =>
+    intro n _ n_h w
+    simp [execution_from_state]
+    have : value_at (w.toList ++ xs) k = value_at w.toList k := by
+      have : n ≥ k := by
+        simp [highest_var] at n_h
+        exact n_h.left
+      have : n + 1 > k := by simp_arith [this]
+      exact value_at_first_k w this
+    rw [this]
+    generalize value_at w.toList k = m
+    revert w n
+    induction m
+    case zero =>
+      intros
+      simp [loop_n_times]
+    case succ m m_ih =>
+      intro n v n_h w h'
+      simp [loop_n_times]
+      have : n ≥ highest_var inner := by
+        simp [highest_var] at n_h
+        exact n_h.right
+      simp[inner_ih v this w]
+      let ys := execution_from_state w.toList inner
+      have : ys.length = n + 1 := by
+        have : n + 1 ≥ highest_var inner + 1 := by simp_arith [this]
+        simp [execution_from_state_long_enough_preserves_length inner w this]
+      let w' : VectNat (n + 1) := ⟨ys, this⟩
+      have : execution_from_state w.toList inner = w'.toList := rfl
+      rw [this]
+      have : value_at (w'.toList ++ xs) k = value_at w'.toList k := by
+        have : n ≥ k := by
+          simp [highest_var] at n_h
+          exact n_h.left
+        have : n + 1 > k := by simp_arith [this]
+        exact value_at_first_k w' this
+      exact m_ih v n_h w' this
+  case seq_execution p p' p_ih p'_ih =>
+    intro n v n_h w
+    simp [execution_from_state]
+    have : n ≥ highest_var p := by
+      simp [highest_var] at n_h
+      exact n_h.left
+    rw [p_ih v this]
+    let ys := execution_from_state w.toList p
+    have : ys.length = n + 1 := by
+      have : n + 1 ≥ highest_var p + 1 := by simp [this]
+      simp [execution_from_state_long_enough_preserves_length p w this]
+    let w' : VectNat (n + 1) := ⟨ys, this⟩
+    have : execution_from_state w.toList p = w'.toList := rfl
+    rw [this]
+    have : n ≥ highest_var p' := by
+      simp [highest_var] at n_h
+      exact n_h.right
+    exact p'_ih v this w'
+
+theorem execution_from_state_append_xs (v : VectNat n) :
+    execution_from_state (init_state v ++ List.zeros (highest_var p - n) ++ xs) p
+    = (execution_from_state (init_state v ++ List.zeros (highest_var p - n)) p) ++ xs := by
+  rw [init_state]
+  let ys := v.toList ++ List.zeros (highest_var p - n)
+  let m := ys.length
+  have m_h : m ≥ highest_var p := by
+    simp [m, ys]
+    rw [Nat.add_comm, Nat.sub_add_eq_max]
+    exact Nat.le_max_left (highest_var p) n
+  let w : VectNat m := ⟨ys, rfl⟩
+  have : 0 :: w.toList = 0 :: v.toList ++ List.zeros (highest_var p - n) := rfl
+  rw [←this, ←init_state, execution_from_state_ge_highest_append w m_h]
+
+theorem cleanly_computable_append_xs {f : VectNat n → Nat} (h_p : cleanly_computes p f) :
+    ∀ xs : VarState, ∀ v : VectNat n,
+      execution_from_state (init_state v ++ List.zeros (highest_var p - n) ++ xs) p
+      =
+      (f v) :: v.toList ++ List.zeros (highest_var p - n) ++ xs := by
+  intros
+  rw [execution_from_state_append_xs, h_p]
+
 ---
-def zero_fun_vect : Mathlib.Vector Nat 0 → Nat := fun _ => 0
+def zero_fun_vect : VectNat 0 → Nat := fun _ => 0
 
 theorem zero_is_loop_computable_cleanly : loop_computable_cleanly zero_fun_vect := by
   let p := CLEAR X 0
@@ -255,7 +541,7 @@ theorem zero_is_loop_computable_cleanly : loop_computable_cleanly zero_fun_vect 
   intro v
   simp [init_state, highest_var, p, execution_from_state, clear_value, zero_fun_vect]
 
-def succ_fun_vect : Mathlib.Vector Nat 1 → Nat := fun v => v.head + 1
+def succ_fun_vect : VectNat 1 → Nat := fun v => v.head + 1
 
 theorem succ_is_loop_computable_cleanly : loop_computable_cleanly succ_fun_vect := by
   let p₁ :=
@@ -287,3 +573,35 @@ theorem get_is_loop_computable_cleanly (i : Fin n) : loop_computable_cleanly (fu
   have : i + 1 - n = 0 := by exact Nat.sub_eq_zero_iff_le.2 i.isLt
   simp [init_state, highest_var, this, p, execution_from_state,
     loop_inc_adds_value, value_at_cons_succ, value_at, Mathlib.Vector.get_eq_get]
+
+theorem comp_is_loop_computable_cleanly (g : Fin n → Mathlib.Vector ℕ m → ℕ) :
+      loop_computable_cleanly f
+    → (∀ i, loop_computable_cleanly (g i))
+    → loop_computable_cleanly fun a => f (Mathlib.Vector.ofFn fun i => g i a) := by
+  sorry
+
+theorem prec_is_loop_computable_cleanly {f : VectNat n → Nat}
+    {g : VectNat (n + 2) → Nat} : loop_computable_cleanly f
+    → loop_computable_cleanly g
+    → loop_computable_cleanly fun v : Mathlib.Vector ℕ (n + 1) =>
+      v.head.rec (f v.tail) fun y IH => g (y ::ᵥ IH ::ᵥ v.tail) := by
+  intro ⟨p_f, f_h⟩ ⟨p_g, g_h⟩
+
+  sorry
+
+theorem primrec'_is_loop_computable_cleanly : Nat.Primrec' f → loop_computable_cleanly f := by
+  intro h
+  induction h
+  case zero => exact zero_is_loop_computable_cleanly
+  case succ => exact succ_is_loop_computable_cleanly
+  case get i => exact get_is_loop_computable_cleanly i
+  case comp g _ _ f_ih g_ih => exact comp_is_loop_computable_cleanly g f_ih g_ih
+  case prec f_ih g_ih => exact prec_is_loop_computable_cleanly f_ih g_ih
+
+theorem primrec_is_loop_computable {f : VectNat n → Nat} :
+    Primrec f → loop_computable f := by
+  intro h
+  have := Nat.Primrec'.of_prim h
+  have := primrec'_is_loop_computable_cleanly this
+  have := loop_computable_cleanly_is_loop_computable this
+  assumption
