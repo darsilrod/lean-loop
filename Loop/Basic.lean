@@ -37,17 +37,13 @@ theorem loop_computable_cleanly_is_loop_computable : loop_computable_cleanly f �
 
 --
 
-def zero_fun_vect : VectNat 0 → Nat := fun _ => 0
-
-theorem zero_is_loop_computable_cleanly : loop_computable_cleanly zero_fun_vect := by
+theorem zero_is_loop_computable_cleanly : loop_computable_cleanly fun _ : VectNat 0 => 0 := by
   let p := CLEAR X 0
   exists p
   intro v
-  simp [init_state, highest_var, p, execution_from_state, clear_value, zero_fun_vect]
+  simp [init_state, highest_var, p, execution_from_state, clear_value]
 
-def succ_fun_vect : VectNat 1 → Nat := fun v => v.head + 1
-
-theorem succ_is_loop_computable_cleanly : loop_computable_cleanly succ_fun_vect := by
+theorem succ_is_loop_computable_cleanly : loop_computable_cleanly fun v : VectNat 1 => v.head + 1 := by
   let p₁ :=
     LOOP X 1 DO
       INC X 0
@@ -58,7 +54,7 @@ theorem succ_is_loop_computable_cleanly : loop_computable_cleanly succ_fun_vect 
 
   exists p
   intro v
-  simp [init_state, succ_fun_vect, highest_var]
+  simp [init_state, highest_var]
   exact calc
     execution_from_state [0, v.head] p
       =
@@ -78,7 +74,7 @@ theorem get_is_loop_computable_cleanly (i : Fin n) : loop_computable_cleanly (fu
   simp [init_state, highest_var, this, p, execution_from_state,
     loop_inc_adds_value, value_at_cons_succ, value_at, Mathlib.Vector.get_eq_get]
 
-theorem comp_is_loop_computable_cleanly (g : Fin n → VectNat m → ℕ) :
+theorem comp_is_loop_computable_cleanly (g : Fin n → VectNat m → Nat) :
       loop_computable_cleanly f
     → (∀ i, loop_computable_cleanly (g i))
     → loop_computable_cleanly fun a => f (Mathlib.Vector.ofFn fun i => g i a) := by
@@ -87,7 +83,7 @@ theorem comp_is_loop_computable_cleanly (g : Fin n → VectNat m → ℕ) :
 theorem prec_is_loop_computable_cleanly {f : VectNat n → Nat}
     {g : VectNat (n + 2) → Nat} : loop_computable_cleanly f
     → loop_computable_cleanly g
-    → loop_computable_cleanly fun v : Mathlib.Vector ℕ (n + 1) =>
+    → loop_computable_cleanly fun v : VectNat (n + 1) =>
       v.head.rec (f v.tail) fun y IH => g (y ::ᵥ IH ::ᵥ v.tail) := by
   intro ⟨p_f, f_h⟩ ⟨p_g, g_h⟩
 
@@ -98,6 +94,8 @@ theorem prec_is_loop_computable_cleanly {f : VectNat n → Nat}
   let result := offset + 1
   let Z := fun j => offset + 2 + j -- from Z 0 to Z n
 
+  -- Part I: construction of the program
+
   -- Step 1: compute f of the last n inputs and store the result in the
   -- 'result' variable
 
@@ -107,33 +105,30 @@ theorem prec_is_loop_computable_cleanly {f : VectNat n → Nat}
   -- function
   let store_X_1_to_X_succ_n : Nat → Program := Nat.rec
     (X (Z 0) += X 1)
-    fun n p_ind => p_ind ++ X (Z (n + 1)) += X (n + 2)
+    fun n p_n => p_n ++ X (Z (n + 1)) += X (n + 2)
 
   let p_1_1 := store_X_1_to_X_succ_n n
 
   -- -- 1.2: Clear inputs
-  -- TODO: check correctness
-  let clear_X_j_to_X_j_plus_n (j : Nat) : Nat → Program := Nat.rec
+  let clear_X_j_to_X_n_plus_j (j : Nat) : Nat → Program := Nat.rec
     (CLEAR X j)
-    fun n p_ind => p_ind ++ CLEAR X (j + (n + 1))
+    fun n p_n => p_n ++ CLEAR X ((n + 1) + j)
 
-  let p_1_2 := clear_X_j_to_X_j_plus_n 1 n
+  let p_1_2 := clear_X_j_to_X_n_plus_j 1 n
 
   -- -- 1.3. Setup inputs and execute f
-  let setup_X_j_to_X_j_plus_succ_n (j : Nat) : Nat → Program := Nat.rec
+  let setup_X_j_to_X_n_plus_j (j : Nat) : Nat → Program := Nat.rec
     (X j += X (Z 1))
-    fun n p_ind => p_ind ++ X (j + (n + 1)) += X (Z (n + 1))
+    fun n p_n => p_n ++ X ((n + 1) + j) += X (Z (n + 2))
 
-  let setup_X_1_to_X_n_and_execute_f : Nat → Program
+  let p_1_3 := match n with
     | 0 => p_f
-    | n + 1 => setup_X_j_to_X_j_plus_succ_n 1 n ++ p_f
+    | n + 1 => setup_X_j_to_X_n_plus_j 1 n ++ p_f
 
-  let p_1_3 := setup_X_1_to_X_n_and_execute_f n
-
-  -- -- 1.5. Store result
+  -- -- 1.4. Store result
   let p_1_4 := X result += X 0
 
-  -- -- 1.6. Clear X 0
+  -- -- 1.5. Clear X 0
   let p_1_5 := CLEAR X 0
 
   let p_1 := p_1_1 ++ p_1_2 ++ p_1_3 ++ p_1_4 ++ p_1_5
@@ -141,18 +136,16 @@ theorem prec_is_loop_computable_cleanly {f : VectNat n → Nat}
 
   -- Step 2: compute g counter number of times, for each recursive step
 
-  -- 2.1: Setup X 2
-  let p_2_1 := CLEAR X 2
+  -- 2.1: Clear inputs
+  let p_2_1 := clear_X_j_to_X_n_plus_j 1 (n + 1)
 
-  -- 2.2: Setup X 1
-  let p_2_2 := CLEAR X 1 ++ X 1 += X result
+  -- 2.2: Setup X 2
+  let p_2_2 := X 2 += X result
 
   -- 2.3: Setup inputs and execute_p_g
-  let setup_X_3_to_X_succ_succ_n_and_execute_g : Nat → Program
-  | 0 => p_g
-  | n + 1 => setup_X_j_to_X_j_plus_succ_n 3 n ++ p_g
-
-  let p_2_3 : Program := setup_X_3_to_X_succ_succ_n_and_execute_g n
+  let p_2_3 : Program := match n with
+    | 0 => p_g
+    | n + 1 => setup_X_j_to_X_n_plus_j 3 n ++ p_g
 
   -- 2.4: Store result
   let p_2_4 := CLEAR X result ++ X result += X 0
@@ -160,8 +153,8 @@ theorem prec_is_loop_computable_cleanly {f : VectNat n → Nat}
   -- 2.5: Clear X 0
   let p_2_5 := CLEAR X 0
 
-  -- 2.6: Increment X 2
-  let p_2_6 := INC X 2
+  -- 2.6: Increment X 1
+  let p_2_6 := INC X 1
 
   -- 2.7: Loop
   let loop_inner := p_2_2 ++ p_2_3 ++ p_2_4 ++ p_2_5 ++ p_2_6
@@ -176,18 +169,20 @@ theorem prec_is_loop_computable_cleanly {f : VectNat n → Nat}
   let p_3_1 := X 0 += X result
 
   -- -- 3.2: Clear inputs
-  let p_3_2 := clear_X_j_to_X_j_plus_n 1 (n + 1)
+  let p_3_2 := clear_X_j_to_X_n_plus_j 1 (n + 1)
 
   -- -- 3.3: Setup inputs
-  let p_3_3 : Program := X 1 += X (Z 0) ++ setup_X_j_to_X_j_plus_succ_n 2 n
+  let p_3_3 : Program := match n with
+    | 0 => X 1 += X (Z 0)
+    | n + 1 => X 1 += X (Z 0) ++ setup_X_j_to_X_n_plus_j 2 n
 
   -- -- 3.4: Clear result
   let p_3_4 := CLEAR X result
 
   -- -- 3.5: Clear Z j
-  let rec clear_Z_0_to_Z_n : Nat → Program
-  | 0 => CLEAR X (Z 0)
-  | n + 1 => clear_Z_0_to_Z_n n ++ CLEAR X (Z (n + 1))
+  let clear_Z_0_to_Z_n : Nat → Program := Nat.rec
+    (CLEAR X (Z 0))
+    fun n p_n => p_n ++ CLEAR X (Z (n + 1))
 
   let p_3_5 : Program := clear_Z_0_to_Z_n n
 
@@ -199,37 +194,52 @@ theorem prec_is_loop_computable_cleanly {f : VectNat n → Nat}
 
   intro v
 
-  -- Rewriting to analyise the program more easily
-  have highest_var_store (n : Nat) : highest_var (store_X_1_to_X_succ_n n) = offset + n + 2 := by
+  -- Part II: rewriting to analyise the program more easily
+  have highest_var_store (n : Nat) : highest_var (store_X_1_to_X_succ_n n) = Z n := by
     induction n
     case zero =>
       simp [highest_var, Z]
     case succ n n_ih =>
       simp [highest_var, n_ih, Z]
-      sorry
+      have : offset + 2 + (n + 1) = (n + 2) + offset + 1 := by simp_arith
+      rw [this]
+      simp_arith
 
-  have highest_var_clear (j : Nat) (n : Nat) : highest_var (clear_X_j_to_X_j_plus_n j n) = j + (n + 1) := by
+  have highest_var_clear (j n : Nat) : highest_var (clear_X_j_to_X_n_plus_j j n) = j + n := by
     induction n
     case zero =>
       simp [highest_var]
-      sorry
+    case succ n n_ih =>
+      simp_arith [highest_var, n_ih]
+
+  have highest_var_setup (j n : Nat) : highest_var (setup_X_j_to_X_n_plus_j j n) = Z n := by
+    -- NOT TRUE! j ≤ n + 2
     sorry
 
-  have highest_var_p_1 : highest_var p_1 = offset + n + 2 := by
+  have highest_var_clear_Z (n : Nat) : highest_var (clear_Z_0_to_Z_n n) = Z n := by
+    induction n
+    case zero =>
+      simp [highest_var]
+    case succ n n_ih =>
+      simp [highest_var, n_ih]
+      simp_arith [Z]
+
+  have highest_var_p_1 : highest_var p_1 = Z n := by
     simp [p_1, concat_is_seq_execution, highest_var]
     sorry
-  have highest_var_p_2 : highest_var p_2 = offset + 2 := by
-    simp [p_2, concat_is_seq_execution, highest_var, Z]
-    constructor
-    · simp [result]
-    · simp [p_2_3]
-      sorry
-  have highest_var_p_3 : highest_var p_3 = offset + n + 2 := by sorry
+
+  have highest_var_p_2 : highest_var p_2 = Z n := by
+    simp [p_2, concat_is_seq_execution, highest_var]
+    sorry
+
+  have highest_var_p_3 : highest_var p_3 = Z n := by
+    sorry
+
   have : highest_var p = offset + n + 2 := by
     simp [p, concat_is_seq_execution]
     repeat rw [highest_var]
     rw [highest_var_p_1, highest_var_p_2, highest_var_p_3]
-    simp_arith
+    simp_arith [Z]
   rw [this]
   have : offset + n + 2 - (n + 1) = 1 + offset := by calc
     offset + n + 2 - (n + 1)
@@ -254,6 +264,60 @@ theorem prec_is_loop_computable_cleanly {f : VectNat n → Nat}
   have : 0 :: v.toList ++ 0 :: (List.zeros padding ++ 0 :: 0 :: List.zeros n)
     = 0 :: v.toList ++ 0 :: List.zeros padding ++ 0 :: 0 :: List.zeros n := by simp
   repeat rw [this]
+  let h : VectNat (n + 1) → Nat := fun v => Nat.rec (f v.tail) (fun y IH => g (y ::ᵥ IH ::ᵥ v.tail)) v.head
+  have : (fun v =>
+    Nat.rec (f (Mathlib.Vector.tail v)) (fun y IH => g (y ::ᵥ IH ::ᵥ Mathlib.Vector.tail v))
+    (Mathlib.Vector.head v)) v = h v := rfl
+  rw [this]
+  -- let ⟨x :: xs, v_length⟩ := v
+  -- simp
+  -- let w : VectNat n := ⟨xs, by simp at v_length; exact v_length⟩
+  -- have : ⟨x :: xs, v_length⟩ = x ::ᵥ w := rfl
+  -- rw [this]
+  -- Part three: analyse each part of the program
+
+
+  have execution_p_1_1 : execution_from_state (0 :: v.toList ++ 0 :: List.zeros padding ++ 0 :: 0 :: List.zeros n) p_1_1
+      = 0 :: v.toList ++ 0 :: List.zeros padding ++ 0 :: v.toList := by
+    sorry
+
+  have execution_p_1_2 : execution_from_state (0 :: v.toList ++ 0 :: List.zeros padding ++ 0 :: v.toList) p_1_2
+      = 0 :: List.zeros (n + 1) ++ 0 :: List.zeros padding ++ 0 :: v.toList := by
+    sorry
+
+  have execution_p_1_3 : execution_from_state (0 :: List.zeros (n + 1) ++ 0 :: List.zeros padding ++ 0 :: v.toList) p_1_3
+      = (f v.tail) :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ 0 :: v.toList := by
+    sorry
+
+  have execution_p_1_4 : execution_from_state ((f v.tail) :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ 0 :: v.toList) p_1_4
+      = (f v.tail) :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ (f v.tail) :: v.toList := by
+    sorry
+
+  have execution_p_1_5 : execution_from_state ((f v.tail) :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ (f v.tail) :: v.toList) p_1_5
+      = 0 :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ (f v.tail) :: v.toList := by
+    simp [p_1_5, execution_from_state]
+    rw [clear_value_cons_zero]
+
+  have execution_p_1 : execution_from_state (0 :: v.toList ++ 0 :: List.zeros padding ++ 0 :: 0 :: List.zeros n) p_1
+      = 0 :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ (f v.tail) :: v.toList := by
+    exact calc
+      execution_from_state (0 :: v.toList ++ 0 :: List.zeros padding ++ 0 :: 0 :: List.zeros n) p_1
+        =
+      execution_from_state (0 :: v.toList ++ 0 :: List.zeros padding ++ 0 :: 0 :: List.zeros n) (p_1_1 ++ p_1_2 ++ p_1_3 ++ p_1_4 ++ p_1_5) := rfl
+      _ =
+      execution_from_state (0 :: v.toList ++ 0 :: List.zeros padding ++ 0 :: v.toList) (p_1_2 ++ p_1_3 ++ p_1_4 ++ p_1_5)  := by sorry
+      _ =
+      execution_from_state (0 :: List.zeros (n + 1) ++ 0 :: List.zeros padding ++ 0 :: v.toList) (p_1_3 ++ p_1_4 ++ p_1_5) := by sorry
+      _ =
+      execution_from_state ((f v.tail) :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ 0 :: v.toList) (p_1_4 ++ p_1_5) := by sorry
+      _ =
+      execution_from_state ((f v.tail) :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ (f v.tail) :: v.toList) p_1_5 := by sorry
+      _ =
+      0 :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ (f v.tail) :: v.toList := execution_p_1_5
+
+  --
+
+
 
 
   sorry
