@@ -21,7 +21,10 @@ open Program
 notation "CLEAR X " n:68 => clear_var n
 notation "INC X " n:68 => increment_var n
 notation "LOOP X " n " DO " ls " END" => loop_var n ls
-notation "X " i " += X " j:68 => LOOP X j DO INC X i END
+
+def inc_X_i_X_j := fun i j => LOOP X j DO INC X i END
+
+notation "X " i " += X " j:68 => inc_X_i_X_j i j
 
 instance : Append Program where
   append p p' := seq_execution p p'
@@ -96,3 +99,21 @@ abbrev cleanly_computes (p : Program) (f : VectNat n → Nat) : Prop :=
 -- /- A function is loop computable cleanly if it does not modify the initial state,. -/
 def loop_computable_cleanly (f : VectNat n → Nat) : Prop :=
   ∃ p : Program, cleanly_computes p f
+
+-- Definitions for the variables and functions that will be used in different
+-- programs
+def store_X_1_to_X_succ_n (idx : Nat) : Nat → Program
+  | 0 => X idx += X 1
+  | n + 1 => store_X_1_to_X_succ_n idx n ++ X (idx + n + 1) += X (n + 2)
+
+def clear_X_j_to_X_n_plus_j (j : Nat) : Nat → Program
+  | 0 => CLEAR X j
+  | n + 1 => clear_X_j_to_X_n_plus_j j n ++ CLEAR X (n + 1 + j)
+
+def setup_X_j_to_X_n_plus_j (idx : Nat) (j : Nat) : Nat → Program
+  | 0 => X j += X (idx + 1)
+  | n + 1 => setup_X_j_to_X_n_plus_j idx j n ++ X (n + 1 + j) += X (idx + n + 2)
+
+def clear_Z_0_to_Z_n (idx : Nat) : Nat → Program
+  | 0 => CLEAR X idx
+  | n + 1 => clear_Z_0_to_Z_n idx n ++ CLEAR X (idx + n + 1)

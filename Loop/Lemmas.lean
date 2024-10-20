@@ -29,6 +29,10 @@ theorem concat_is_seq_execution {p p' : Program} : p ++ p' = seq_execution p p' 
 theorem zeros_succ : List.zeros (n + 1) = 0 :: List.zeros n := by
   simp [List.zeros, List.replicate]
 
+theorem zeros_length : (List.zeros n).length = n := by
+  dsimp [List.zeros]
+  rw [List.length_replicate]
+
 theorem value_at_zeros_is_zero (n k : Nat) : value_at (List.zeros n) k = 0 := by
   revert n
   induction k
@@ -325,82 +329,85 @@ theorem execution_from_state_long_enough_preserves_length (p : Program) (v : Vec
       exact Nat.le_trans this n_h
     exact p'_ih w' this
 
-theorem execution_from_state_ge_highest_append (v : VectNat n) (n_h : n ≥ highest_var p) :
-    execution_from_state (init_state v ++ xs) p = (execution_from_state (init_state v) p) ++ xs := by
-  suffices g : (w : VectNat (n + 1)) →  execution_from_state (w.toList ++ xs) p = (execution_from_state w.toList p) ++ xs from by
-    let w : VectNat (n + 1) := ⟨0 :: v.toList, by simp⟩
-    exact g w
+theorem execution_from_state_gt_highest_append {n : Nat} (v : VectNat (n + 1)) (n_h : n ≥ highest_var p) :
+    execution_from_state (v.toList ++ xs) p = (execution_from_state v.toList p) ++ xs := by
   revert n
   induction p
   case clear_var k =>
-    intro n _ n_h w
+    intro n v n_h
     simp [execution_from_state]
-    have : w.toList.length ≥ k + 1 := by
-      have : k ≤ n := by  simp [highest_var] at n_h; assumption
-      simp_arith [this]
-    exact clear_value_clears_succ_largest_index w.toList this
-  case increment_var k =>
-    intro n _ n_h w
-    simp [execution_from_state]
-    have : w.toList.length ≥ k + 1 := by
+    have : v.toList.length ≥ k + 1 := by
       have : k ≤ n := by simp [highest_var] at n_h; assumption
       simp_arith [this]
-    exact inc_value_increments_succ_largest_index w.toList this
-  case loop_var k inner inner_ih =>
-    intro n _ n_h w
+    exact clear_value_clears_succ_largest_index v.toList this
+    -- have := clear_value_clears_succ_largest_index v.toList
+  case increment_var k =>
+    intro n v n_h
     simp [execution_from_state]
-    have : value_at (w.toList ++ xs) k = value_at w.toList k := by
+    have : v.toList.length ≥ k + 1 := by
+      have : k ≤ n := by simp [highest_var] at n_h; assumption
+      simp_arith [this]
+    exact inc_value_increments_succ_largest_index v.toList this
+  case loop_var k inner inner_ih =>
+    intro n v n_h
+    simp [execution_from_state]
+    have : value_at (v.toList ++ xs) k = value_at v.toList k := by
       have : n ≥ k := by
         simp [highest_var] at n_h
         exact n_h.left
       have : n + 1 > k := by simp_arith [this]
-      exact value_at_first_k w this
+      exact value_at_first_k v this
     rw [this]
-    generalize value_at w.toList k = m
-    revert w n
+    generalize value_at v.toList k = m
+    revert v n
     induction m
     case zero =>
       intros
       simp [loop_n_times]
     case succ m m_ih =>
-      intro n v n_h w _
+      intro n v n_h _
       simp [loop_n_times]
       have : n ≥ highest_var inner := by
         simp [highest_var] at n_h
         exact n_h.right
-      simp[inner_ih v this w]
-      let ys := execution_from_state w.toList inner
+      simp[inner_ih v this]
+      let ys := execution_from_state v.toList inner
       have : ys.length = n + 1 := by
         have : n + 1 ≥ highest_var inner + 1 := by simp_arith [this]
-        simp [execution_from_state_long_enough_preserves_length inner w this]
-      let w' : VectNat (n + 1) := ⟨ys, this⟩
-      have : execution_from_state w.toList inner = w'.toList := rfl
+        simp [execution_from_state_long_enough_preserves_length inner v this]
+      let v' : VectNat (n + 1) := ⟨ys, this⟩
+      have : execution_from_state v.toList inner = v'.toList := rfl
       rw [this]
-      have : value_at (w'.toList ++ xs) k = value_at w'.toList k := by
+      have : value_at (v'.toList ++ xs) k = value_at v'.toList k := by
         have : n ≥ k := by
           simp [highest_var] at n_h
           exact n_h.left
         have : n + 1 > k := by simp_arith [this]
-        exact value_at_first_k w' this
-      exact m_ih v n_h w' this
+        exact value_at_first_k v' this
+      exact m_ih v' n_h this
+
   case seq_execution p p' p_ih p'_ih =>
-    intro n v n_h w
+    intro n v n_h
     simp [execution_from_state]
     have : n ≥ highest_var p := by
       simp [highest_var] at n_h
       exact n_h.left
     rw [p_ih v this]
-    let ys := execution_from_state w.toList p
+    let ys := execution_from_state v.toList p
     have : ys.length = n + 1 := by
       have : n + 1 ≥ highest_var p + 1 := by simp [this]
-      simp [execution_from_state_long_enough_preserves_length p w this]
-    let w' : VectNat (n + 1) := ⟨ys, this⟩
-    have : execution_from_state w.toList p = w'.toList := rfl
+      simp [execution_from_state_long_enough_preserves_length p v this]
+    let v' : VectNat (n + 1) := ⟨ys, this⟩
+    have : execution_from_state v.toList p = v'.toList := rfl
     rw [this]
     have : n ≥ highest_var p' := by
       simp [highest_var] at n_h
       exact n_h.right
-    exact p'_ih v this w'
+    exact p'_ih v' this
+
+theorem execution_from_init_state_ge_highest_append (v : VectNat n) (n_h : n ≥ highest_var p) :
+    execution_from_state (init_state v ++ xs) p = (execution_from_state (init_state v) p) ++ xs := by
+  apply execution_from_state_gt_highest_append (0 ::ᵥ v) n_h
 
 theorem execution_from_state_append_xs (v : VectNat n) :
     execution_from_state (init_state v ++ List.zeros (highest_var p - n) ++ xs) p
@@ -414,7 +421,7 @@ theorem execution_from_state_append_xs (v : VectNat n) :
     exact Nat.le_max_left (highest_var p) n
   let w : VectNat m := ⟨ys, rfl⟩
   have : 0 :: w.toList = 0 :: v.toList ++ List.zeros (highest_var p - n) := rfl
-  rw [←this, ←init_state, execution_from_state_ge_highest_append w m_h]
+  rw [←this, ←init_state, execution_from_init_state_ge_highest_append w m_h]
 
 theorem cleanly_computable_append_xs {f : VectNat n → Nat} (h_p : cleanly_computes p f) :
     ∀ xs : VarState, ∀ v : VectNat n,
@@ -453,3 +460,313 @@ theorem cleanly_computable_append_zeros_append_xs {f : VectNat n → Nat} {k : N
     f v :: v.toList ++ (List.zeros m ++ List.zeros (k - m)) ++ xs := by repeat rw [List.append_assoc]
     _ =
     f v :: v.toList ++ List.zeros k ++ xs := by rw [append_zeros_addition _ _ _ this]
+
+theorem highest_var_concat : highest_var (p1 ++ p2) = max (highest_var p1) (highest_var p2) := by simp [highest_var]
+
+theorem loop_n_times_loop : loop_n_times (n + 1) xs p = execution_from_state (loop_n_times n xs p) p := by
+  revert xs
+  induction n
+  case zero =>
+    simp [loop_n_times]
+  case succ n n_ih =>
+    intro xs
+    have : loop_n_times ((n + 1) + 1) xs p = loop_n_times (n + 1) (execution_from_state xs p) p := by simp [loop_n_times]
+    rw [this, n_ih, ←loop_n_times]
+
+theorem value_at_n : (xs.length = n) →
+    value_at (xs ++ y :: ys) n = y := by
+  revert xs
+  induction n
+  case zero =>
+    simp [value_at_cons_zero]
+  case succ n n_ih =>
+    intro xs xs_l
+    let (x :: xs) := xs
+    simp at xs_l
+    have : x :: xs ++ y :: ys = x :: (xs ++ y :: ys) := by simp
+    rw [this, value_at_cons_succ, n_ih xs_l]
+
+theorem clear_value_at_n : (xs.length = n) →
+    clear_value (xs ++ y :: ys) n = xs ++ 0 :: ys := by
+  revert xs
+  induction n
+  case zero =>
+    simp [clear_value]
+  case succ n n_ih =>
+    intro xs xs_l
+    let (x :: xs) := xs
+    simp at xs_l
+    rw [List.cons_append, clear_value_cons_succ, n_ih xs_l, List.cons_append]
+
+theorem inc_value_at_n : (xs.length = n) →
+    inc_value (xs ++ y :: ys) n = xs ++ (y + 1) :: ys := by
+  revert xs
+  induction n
+  case zero =>
+    simp [inc_value]
+  case succ n n_ih =>
+    intro xs xs_l
+    let (x :: xs) := xs
+    simp at xs_l
+    rw [List.cons_append, inc_value_cons_succ, n_ih xs_l, List.cons_append]
+
+theorem inc_X_i_X_j_adds_value : (xs.length = n) →
+    execution_from_state (xs ++ y :: ys) (X n += X j)
+      = xs ++ [y + value_at (xs ++ y :: ys) j] ++ ys := by
+  intro xs_l
+  simp [inc_X_i_X_j, execution_from_state]
+  let k := value_at (xs ++ y :: ys) j
+  have : value_at (xs ++ y :: ys) j = k := rfl
+  rewrite [this]
+  induction k
+  case zero =>
+    simp [loop_n_times]
+  case succ k k_ih =>
+    rewrite [loop_n_times_loop, k_ih]
+    simp [execution_from_state]
+    rw [inc_value_at_n xs_l, Nat.add_assoc y k 1]
+
+theorem nested_max_lemma {a b : Nat} :
+    max (max a b) (max (a + 1) (b + 1)) = max (a + 1) (b + 1) := by
+  cases Nat.decLe a b
+  case isTrue h =>
+    repeat rw [Nat.max_def]
+    simp [h]
+  case isFalse h =>
+    repeat rw [Nat.max_def]
+    simp [h]
+
+theorem List.take_n_concat_last_eq (xs : List α) (xs_l : xs.length = n + 1) :
+    xs = xs.take n ++ [xs.getLast (List.ne_nil_of_length_eq_add_one xs_l)] := by
+  revert xs
+  induction n
+  case zero =>
+    intro xs xs_l
+    let [x] := xs
+    dsimp [List.take]
+  case succ n n_ih =>
+    intro xs xs_l
+    let (x :: xs) := xs
+    simp_arith [List.length] at xs_l
+    dsimp [List.take]
+    rewrite [List.cons_inj_right, List.getLast_cons (List.ne_nil_of_length_eq_add_one xs_l)]
+    exact n_ih xs xs_l
+
+theorem List.zeros_concat : List.zeros (n + 1) = List.zeros n ++ [0] := by
+  have := take_n_concat_last_eq (zeros (n + 1)) zeros_length
+  simp at this
+  rewrite [←List.zeros] at this
+  assumption
+
+theorem highest_var_store : highest_var (store_X_1_to_X_succ_n idx n) = max (n + 1) (idx + n) := by
+  induction n
+  case zero =>
+    simp [store_X_1_to_X_succ_n, highest_var]
+  case succ n n_ih =>
+    simp [store_X_1_to_X_succ_n, highest_var, n_ih]
+    rw [Nat.add_assoc n 1 1, ←Nat.add_assoc idx n 1]
+
+theorem highest_var_clear : highest_var (clear_X_j_to_X_n_plus_j j n) = n + j := by
+  induction n
+  case zero =>
+    simp [clear_X_j_to_X_n_plus_j, highest_var]
+  case succ n n_ih =>
+    simp [clear_X_j_to_X_n_plus_j, highest_var, n_ih]
+
+theorem highest_var_setup : highest_var (setup_X_j_to_X_n_plus_j idx j n) = max (n + j) (idx + n + 1) := by
+  induction n
+  case zero =>
+    simp [setup_X_j_to_X_n_plus_j, highest_var]
+    rw [Nat.max_comm]
+  case succ n n_ih =>
+    simp [setup_X_j_to_X_n_plus_j, highest_var, n_ih]
+    have : n + 1 + j = n + j + 1 := by rw [Nat.add_assoc, Nat.add_comm 1, Nat.add_assoc]
+    rw [this]
+    have : idx + (n + 1) + 1 = idx + n + 2 := by repeat rw [Nat.add_assoc]
+    rw [this]
+    have : idx + n + 2 = (idx + n + 1) + 1 := by repeat rw [Nat.add_assoc]
+    rw [this]
+    generalize n + j = a
+    generalize idx + n + 1 = b
+    rw [Nat.max_comm (b + 1)]
+    exact nested_max_lemma
+
+theorem highest_var_clear_Z (n : Nat) : highest_var (clear_Z_0_to_Z_n idx n) = idx + n:= by
+  induction n
+  case zero =>
+    simp [highest_var]
+  case succ n n_ih =>
+    simp  [highest_var, n_ih]
+    exact Nat.add_assoc _ _ _
+
+theorem clear_X_lemma (v : VectNat (n + 1)) : execution_from_state (0 :: v.toList) (clear_X_j_to_X_n_plus_j 1 n) = 0 :: List.zeros (n + 1) := by
+  induction n
+  case zero =>
+    simp [clear_X_j_to_X_n_plus_j, execution_from_state, clear_value]
+  case succ n n_ih =>
+    simp [clear_X_j_to_X_n_plus_j, concat_is_seq_execution, execution_from_state]
+    let xs := v.toList.take (n + 1)
+    have := List.ne_nil_of_length_eq_add_one v.length_val
+    let t := v.toList.getLast this
+    have v_list : v.toList = xs ++ [t] := List.take_n_concat_last_eq _ (by simp [this])
+    have xs_l : xs.length = n + 1 := by
+      have := congrArg (List.length) v_list
+      simp at this
+      exact this.symm
+    rewrite [v_list]
+    have : highest_var (clear_X_j_to_X_n_plus_j 1 n) ≤ n + 1 := by
+      have : highest_var (clear_X_j_to_X_n_plus_j 1 n) = n + 1 := highest_var_clear
+      rewrite [this]
+      exact Nat.le_refl _
+    have := @execution_from_state_gt_highest_append (clear_X_j_to_X_n_plus_j 1 n) [t] (n + 1)
+        ⟨0 :: xs, by simp [xs_l]⟩ this
+    simp at this
+    rewrite [this]
+    have := n_ih ⟨xs, xs_l⟩
+    simp at this
+    rewrite [this, clear_value_at_n]
+    simp [←zeros_succ]
+    rw [←List.zeros_concat]
+    simp
+
+theorem lemma_store : ∀ c n : Nat, ∀ w : VectNat c, ∀ v : VectNat (n + 1),
+    execution_from_state (0 :: v.toList ++  w.toList ++ List.zeros (n + 1)) (store_X_1_to_X_succ_n (n + c + 2) n)
+      = 0 :: v.toList ++  w.toList ++ v.toList := by
+  intro c n
+  revert c
+  induction n
+  case zero =>
+    intro c w v
+    let ⟨[x], xs_l⟩ := v
+    simp [Mathlib.Vector.head, store_X_1_to_X_succ_n, execution_from_state]
+    let ys := 0 :: x :: w.toList
+    have : 0 :: x :: (Mathlib.Vector.toList w ++ [0]) = 0 :: x :: w.toList ++ [0] := by simp
+    rewrite [this]
+    have : ys.length = c + 2 := by
+      dsimp [ys]
+      let ⟨ws, ws_l⟩ := w
+      dsimp
+      rw [ws_l]
+    rewrite [inc_X_i_X_j_adds_value this]
+    simp [ys, value_at]
+  case succ n n_ih =>
+    intro c w v
+    let xs := v.toList.take (n + 1)
+    have := List.ne_nil_of_length_eq_add_one v.length_val
+    let t := v.toList.getLast this
+    have v_list : v.toList = xs ++ [t] := List.take_n_concat_last_eq _ (by simp [this])
+    rewrite [v_list]
+    have xs_l : xs.length = n + 1 := by
+      have : (xs ++ [t]).length = v.toList.length := by rw [v_list]
+      simp [List.length_concat] at this
+      assumption
+    have : 0 :: (xs ++ [t]) ++ w.toList = 0 :: xs ++ t :: w.toList := by simp
+    rewrite [this, List.zeros_concat]
+    dsimp [store_X_1_to_X_succ_n, concat_is_seq_execution]
+    simp [execution_from_state]
+    have := calc
+          execution_from_state (0 :: (xs ++ t :: (Mathlib.Vector.toList w ++ (List.zeros (n + 1) ++ [0]))))
+            (store_X_1_to_X_succ_n (n + 1 + c + 2) n)
+        = execution_from_state (0 :: xs ++ t :: Mathlib.Vector.toList w ++ List.zeros (n + 1) ++ [0])
+            (store_X_1_to_X_succ_n (n + 1 + c + 2) n) := by simp
+      _ = execution_from_state (0 :: xs ++ t :: Mathlib.Vector.toList w ++ List.zeros (n + 1))
+            (store_X_1_to_X_succ_n (n + 1 + c + 2) n) ++ [0] := by
+              have l_h : (0 :: xs ++ t :: w.toList ++ List.zeros (n + 1)).length = n + n + c + 4 := by simp_arith [xs_l]
+              have : highest_var (store_X_1_to_X_succ_n (n + 1 + c + 2) n) = n + n + c + 3 := by
+                rewrite [highest_var_store]
+                have : n + 1 ≤ n + 1 + (c + 2 + n) := Nat.le_add_right (n + 1) (c + 2 + n)
+                repeat rewrite [←Nat.add_assoc] at this
+                rewrite [Nat.max_eq_right this]
+                simp_arith
+              have : n + n + c + 3 ≥ highest_var (store_X_1_to_X_succ_n (n + 1 + c + 2) n) := by
+                rewrite [this]
+                exact Nat.le_refl _
+              have := @execution_from_state_gt_highest_append (store_X_1_to_X_succ_n (n + 1 + c + 2) n) [0] (n + n + c + 3)
+                ⟨(0 :: xs ++ t :: w.toList ++ List.zeros (n + 1)), l_h⟩ this
+              simp at this
+              simp
+              exact this
+      _ = 0 :: xs ++ t :: w.toList ++ xs ++ [0] := by
+        have := n_ih (c + 1) ⟨(t :: w.toList), by simp_arith⟩ ⟨xs, xs_l⟩
+        have := congrArg (· ++ [0]) this
+        simp at this
+        rewrite [Nat.add_comm c 1] at this
+        repeat rewrite [←Nat.add_assoc] at this
+        simp
+        assumption
+
+    rewrite [this]
+    have : (0 :: xs ++ t :: Mathlib.Vector.toList w ++ xs).length = n + 1 + c + 2 + n + 1 := by simp_arith [xs_l]
+    rewrite [inc_X_i_X_j_adds_value this]
+    have : value_at (0 :: xs ++ t :: Mathlib.Vector.toList w ++ xs ++ [0]) (n + 2) = t := by
+      have : 0 :: xs ++ t :: w.toList ++ xs ++ [0] = 0 :: xs ++ t :: (w.toList ++ xs ++ [0]) := by simp
+      rewrite [this]
+      have : (0 :: xs).length = n + 2 := by simp_arith [xs_l]
+      exact value_at_n this
+    simp [this]
+    simp at this
+    assumption
+
+theorem lemma_setup : ∀ c n : Nat, ∀ w : VectNat c, ∀ v : VectNat (n + 1),
+    execution_from_state (0 :: List.zeros (n + 1) ++ w.toList ++ v.toList) (setup_X_j_to_X_n_plus_j (n + c + 1) 1 n)
+      = 0 :: v.toList ++  w.toList ++ v.toList := by
+  intro c n
+  revert c
+  induction n
+  case zero =>
+    intro c w v
+    let ⟨[x], xs_l⟩ := v
+    simp [Mathlib.Vector.head, setup_X_j_to_X_n_plus_j]
+    have : 0 :: 0 :: (w.toList ++ [x]) = [0] ++ 0 :: w.toList ++ [x] := by simp
+    have := @inc_X_i_X_j_adds_value 1 [0] 0 (w.toList ++ [x]) (c + 2) rfl
+    simp at this
+    rewrite [this]
+    repeat rewrite [←List.cons_append]
+    have : (0 :: 0 :: w.toList).length = c + 2 := by simp
+    rw [value_at_n this]
+  case succ n n_ih =>
+    intro c w v
+    let xs := v.toList.take (n + 1)
+    have := List.ne_nil_of_length_eq_add_one v.length_val
+    let t := v.toList.getLast this
+    have v_list : v.toList = xs ++ [t] := List.take_n_concat_last_eq _ (by simp [this])
+    rewrite [v_list]
+    have xs_l : xs.length = n + 1 := by
+      have : (xs ++ [t]).length = v.toList.length := by rw [v_list]
+      simp [List.length_concat] at this
+      assumption
+    simp_arith
+    dsimp [setup_X_j_to_X_n_plus_j, concat_is_seq_execution]
+    simp [execution_from_state]
+    rewrite [List.zeros_concat]
+    have := calc
+          execution_from_state (0 :: (List.zeros (n + 1) ++ [0] ++ (w.toList ++ (xs ++ [t]))))
+            (setup_X_j_to_X_n_plus_j (n + c + 2) 1 n)
+        = execution_from_state (0 :: List.zeros (n + 1) ++ 0 :: w.toList ++ xs ++ [t])
+            (setup_X_j_to_X_n_plus_j (n + c + 2) 1 n) := by simp
+      _ = (execution_from_state (0 :: List.zeros (n + 1) ++ 0 :: w.toList ++ xs)
+            (setup_X_j_to_X_n_plus_j (n + c + 2) 1 n)) ++ [t] := by
+            have : highest_var (setup_X_j_to_X_n_plus_j (n + c + 2) 1 n) ≤ (2*n + c + 3) := by
+              have : highest_var (setup_X_j_to_X_n_plus_j (n + c + 2) 1 n) = (2*n + c + 3) := by rewrite [highest_var_setup] ; simp_arith
+              rewrite [this]
+              exact Nat.le_refl _
+            have := @execution_from_state_gt_highest_append (setup_X_j_to_X_n_plus_j (n + c + 2) 1 n) [t] (2*n + c + 3)
+              ⟨0 :: List.zeros (n + 1) ++ 0 :: w.toList ++ xs, by simp_arith [xs_l]⟩ this
+            simp at this
+            simp
+            rw [this]
+      _ = 0 :: xs ++ 0 :: w.toList ++ xs ++ [t] := by
+        have := n_ih (c + 1) ⟨0 :: w.toList, by simp⟩ ⟨xs, xs_l⟩
+        simp_arith at this
+        simp
+        rewrite [this]
+        simp
+    rewrite [this]
+    simp_arith
+    have := @inc_X_i_X_j_adds_value (n + 2) (0 :: xs) 0 (w.toList ++ xs ++ [t]) (2*n + c + 4) (by simp_arith [xs_l])
+    simp at this
+    rewrite [this]
+    have := @value_at_n (2*n + c + 4) (0 :: xs ++ 0 :: w.toList ++ xs) t [] (by simp_arith [xs_l])
+    simp at this
+    rewrite [this]
+    simp

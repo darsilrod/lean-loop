@@ -17,6 +17,8 @@ programming language, define what Loop-computable functions are, and prove that
 Loop-computable is the same as primitive recursive.
 -/
 
+-- TODO: make constructive version
+
 namespace Loop
 
 open Program
@@ -80,6 +82,338 @@ theorem comp_is_loop_computable_cleanly (g : Fin n → VectNat m → Nat) :
     → loop_computable_cleanly fun a => f (Mathlib.Vector.ofFn fun i => g i a) := by
   sorry
 
+section prec_is_loop_computable_cleanly_proof
+
+variable {n : Nat} {f : VectNat n → Nat} {g : VectNat (n + 2) → Nat}
+
+-- Part I: construction of the program
+
+def offset (_ : cleanly_computes p_f f) (_ : cleanly_computes p_g g) : Nat :=  max (n + 2) (max (highest_var p_f) (highest_var p_g))
+
+-- Step 1: compute f of the last n inputs and store the result in the
+-- 'result' variable
+def prec_program_1 (f_h : cleanly_computes p_f f) (g_h : cleanly_computes p_g g) : Program :=
+  let offset := offset f_h g_h
+  let p_1_1 := store_X_1_to_X_succ_n (offset + 2) n
+  let p_1_2 := clear_X_j_to_X_n_plus_j 1 n
+  let p_1_3 := match (generalizing := false) n with
+    | 0 => p_f
+    | n + 1 => setup_X_j_to_X_n_plus_j (offset + 2) 1 n ++ p_f
+  let p_1_4 := X (offset + 1) += X 0
+  let p_1_5 := CLEAR X 0
+  p_1_1 ++ p_1_2 ++ p_1_3 ++ p_1_4 ++ p_1_5
+
+-- Step 2: compute g counter number of times, for each recursive step
+def prec_program_2 (f_h : cleanly_computes p_f f) (g_h : cleanly_computes p_g g) : Program :=
+  let offset := offset f_h g_h
+  let p_2_1 := X 2 += X (offset + 1)
+  let p_2_2 := match n with
+    | 0 => p_g
+    | n + 1 => setup_X_j_to_X_n_plus_j (offset + 2) 3 n ++ p_g
+  let p_2_3 := CLEAR X (offset + 1) ++ X (offset + 1) += X 0
+  let p_2_4 := CLEAR X 0
+  let p_2_5 := INC X 1
+  let loop_inner := p_2_1 ++ p_2_2 ++ p_2_3 ++ p_2_4 ++ p_2_5
+  let p_loop := LOOP X (offset + 2) DO loop_inner END
+  match n with
+    | 0 => p_loop
+    | n + 1 => clear_X_j_to_X_n_plus_j 1 n ++ p_loop
+
+-- Step 3: Clean up
+def prec_program_3 (f_h : cleanly_computes p_f f) (g_h : cleanly_computes p_g g) : Program :=
+  let offset := offset f_h g_h
+  let p_3_1 := X 0 += X (offset + 1)
+  let p_3_2 := clear_X_j_to_X_n_plus_j 1 (n + 1)
+  let p_3_3 := match n with
+    | 0 => X 1 += X (offset + 2)
+    | n + 1 => setup_X_j_to_X_n_plus_j (offset + 2) 2 n
+  let p_3_4 := CLEAR X (offset + 1)
+  let p_3_5 := clear_Z_0_to_Z_n (offset + 2) n
+  p_3_1 ++ p_3_2 ++ p_3_3 ++ p_3_4 ++ p_3_5
+
+def prec_program (f_h : cleanly_computes p_f f) (g_h : cleanly_computes p_g g) : Program :=
+  let p_1 := prec_program_1 f_h g_h
+  let p_2 := prec_program_2 f_h g_h
+  let p_3 := prec_program_3 f_h g_h
+  p_1 ++ p_2 ++ p_3
+
+-- Part II: calculate the highest variable of the program
+
+theorem prec_program_1_highest_var (f_h : cleanly_computes p_f f) (g_h : cleanly_computes p_g g) :
+    highest_var (prec_program_1 f_h g_h) = offset f_h g_h + 2 + n := by
+  simp [prec_program_1]
+  repeat rewrite [highest_var_concat]
+  rewrite [highest_var_store, highest_var_clear]
+  simp [highest_var]
+  cases n
+  case zero =>
+    simp_arith
+    have : highest_var p_f ≤ offset f_h g_h := by simp [offset]
+    exact Nat.le_trans this (Nat.le_add_right _ 2)
+  case succ n =>
+    rewrite [highest_var_concat, highest_var_setup]
+    have : max (n + 1 + 1) (offset f_h g_h + 2 + (n + 1)) = offset f_h g_h + 2 + (n + 1) := by simp_arith
+    rewrite [this]
+    have : max (n + 1) (offset f_h g_h + 2 + n + 1) = offset f_h g_h + 2 + n + 1 := by simp_arith
+    rewrite [this]
+    have : max (offset f_h g_h + 2 + n + 1) (highest_var p_f) = offset f_h g_h + 2 + n + 1 := by
+      simp_arith
+      have : highest_var p_f ≤ offset f_h g_h := by simp [offset]
+      exact Nat.le_trans this (Nat.le_add_right _ (n + 3))
+    rewrite [this]
+    have : (max (offset f_h g_h + 2 + (n + 1)) (offset f_h g_h + 2 + n + 1)) = offset f_h g_h + 2 + n + 1 := by
+      repeat rewrite [←Nat.add_assoc]
+      exact Nat.max_self _
+    rewrite [this]
+    simp_arith
+
+theorem prec_program_2_highest_var (f_h : cleanly_computes p_f f) (g_h : cleanly_computes p_g g) :
+    highest_var (prec_program_2 f_h g_h) = offset f_h g_h + 2 + n := by
+  simp [prec_program_2]
+  cases n
+  case zero =>
+    simp [highest_var, ]
+    have : highest_var p_g ≤ offset f_h g_h := by simp [offset]
+    exact Nat.le_trans this (Nat.le_add_right _ 2)
+  case succ n =>
+    simp [highest_var, highest_var_clear]
+    rewrite [highest_var_setup]
+    have : max (n + 3) (offset f_h g_h + 2 + n + 1) = offset f_h g_h + 2 + n + 1 := by simp_arith
+    rewrite [this]
+    have : max (offset f_h g_h + 2 + n + 1) (highest_var p_g) = offset f_h g_h + 2 + n + 1 := by
+      simp_arith
+      have : highest_var p_g ≤ offset f_h g_h := by simp [offset]
+      exact Nat.le_trans this (Nat.le_add_right _ (n + 3))
+    rewrite [this]
+    have : max (max (offset f_h g_h + 1) 2) (offset f_h g_h + 2 + n + 1) = offset f_h g_h + 2 + n + 1 := by
+      have : max (offset f_h g_h + 1) 2 ≤ offset f_h g_h + 2 + n + 1 := by
+        simp_arith
+        rw [Nat.add_assoc]
+        exact Nat.le_add_right _ _
+      rewrite [Nat.max_def]
+      simp [this]
+    rewrite [this]
+    simp_arith
+
+theorem prec_program_3_highest_var (f_h : cleanly_computes p_f f) (g_h : cleanly_computes p_g g) :
+    highest_var (prec_program_3 f_h g_h) = offset f_h g_h + 2 + n := by
+  simp [prec_program_3]
+  repeat rewrite [highest_var_concat]
+  rewrite [highest_var_clear, highest_var_clear_Z]
+  cases n
+  case zero =>
+    simp [highest_var]
+  case succ n =>
+    simp [highest_var_setup, highest_var]
+    repeat constructor
+    · simp_arith
+    · have : offset f_h g_h + 2 + (n + 1) = n + 1 + 1 + 1 + offset f_h g_h := by simp_arith
+      rewrite [this]
+      simp
+    constructor
+    · have : offset f_h g_h + 2 + (n + 1) = n + 1 + 1 + offset f_h g_h + 1 := by simp_arith
+      rewrite [this]
+      simp_arith
+    · repeat rw [Nat.add_assoc]
+
+theorem prec_program_highest_var (f_h : cleanly_computes p_f f) (g_h : cleanly_computes p_g g) :
+    highest_var (prec_program f_h g_h) = offset f_h g_h + 2 + n := by
+  simp [prec_program]
+  repeat rewrite [highest_var_concat]
+  rewrite [prec_program_1_highest_var, prec_program_2_highest_var, prec_program_3_highest_var]
+  repeat rw [Nat.max_self]
+
+theorem execution_from_state_prec_program_1_1 (f_h : cleanly_computes p_f f) (g_h : cleanly_computes p_g g) (v : VectNat (n + 1)) :
+    execution_from_state (0 :: (v.toList ++ 0 :: (List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: 0 :: List.zeros n))) (store_X_1_to_X_succ_n (offset f_h g_h + 2) n)
+      = 0 :: v.toList ++ 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: v.toList := by
+  let c :=  offset f_h g_h - (n + 2)
+  have : offset f_h g_h - (n + 2) = c := rfl
+  rewrite [this]
+  have : offset f_h g_h + 2 = c + n + 4 := by
+    simp [c]
+    rewrite [Nat.add_assoc]
+    have : n + 2 ≤ offset f_h g_h := Nat.le_max_left _ _
+    rw [Nat.sub_add_cancel this]
+  rewrite [this]
+  let w := 0 :: List.zeros c ++ [0]
+  have w_l : w.length = c + 2:= by simp [w, c]
+
+  have := lemma_store (c + 2) n ⟨w, w_l⟩ v
+  simp_arith [w] at this
+  simp
+  rewrite [Nat.add_comm c n]
+  exact this
+
+theorem execution_from_state_prec_program_1_2 (f_h : cleanly_computes p_f f) (g_h : cleanly_computes p_g g) (v : VectNat (n + 1)) :
+    execution_from_state (0 :: v.toList ++ 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: v.toList) (clear_X_j_to_X_n_plus_j 1 n)
+      = 0 :: List.zeros (n + 1) ++ 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: v.toList := by
+  have : highest_var (clear_X_j_to_X_n_plus_j 1 n) ≤ n + 1 := by
+    have : highest_var (clear_X_j_to_X_n_plus_j 1 n) = n + 1 := highest_var_clear
+    rewrite [this]
+    exact Nat.le_refl _
+  have := @execution_from_state_gt_highest_append (clear_X_j_to_X_n_plus_j 1 n) (0 :: List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: Mathlib.Vector.toList v)
+    (n + 1) ⟨0 :: v.toList, by simp⟩ this
+  simp at this
+  simp
+  rw [this, clear_X_lemma]
+  simp
+
+theorem execution_from_state_prec_program_1_3 (f_h : cleanly_computes p_f f) (g_h : cleanly_computes p_g g) (v : VectNat (n + 1)) :
+    execution_from_state (0 :: List.zeros (n + 1) ++ 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: v.toList) (match n with | 0 => p_f | n + 1 => setup_X_j_to_X_n_plus_j (offset f_h g_h + 2) 1 n ++ p_f)
+      = f v.tail :: v.tail.toList ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: v.toList := by
+  cases n
+  case zero =>
+    simp
+    have : 0 :: 0 :: 0 :: (List.zeros (offset f_h g_h - 2) ++ [0, v.head]) = 0 :: (0 :: 0 :: List.zeros (offset f_h g_h - 2)) ++ [0, v.head] := by simp
+    rewrite [this]
+    have z_h : 0 :: 0 :: List.zeros (offset f_h g_h - 2) = List.zeros (offset f_h g_h) := by
+      repeat rewrite [←zeros_succ]
+      have : offset f_h g_h - 2 + 2 = offset f_h g_h := by
+        have : offset f_h g_h ≥ 2 := by simp [offset]
+        rw [Nat.sub_add_cancel this]
+      rw [this]
+    rewrite [z_h]
+    have := @cleanly_computable_append_zeros_append_xs 0 p_f f (offset f_h g_h) f_h (0 :: v.toList) Mathlib.Vector.nil (by simp [offset])
+    simp [init_state] at this
+    simp
+    rewrite [this]
+    simp
+    have : 0 :: 0 :: (List.zeros (offset f_h g_h - 2) ++ [0, v.head]) = List.zeros (offset f_h g_h) ++ [0, v.head] := by
+      repeat rewrite [←List.cons_append]
+      rw [z_h]
+    rw [this]
+  case succ n =>
+    let ⟨x :: xs, xs_l⟩ := v
+    simp at xs_l
+    rewrite [List.zeros_concat]
+    simp [concat_is_seq_execution, execution_from_state, Mathlib.Vector.tail]
+    have list_zeros : 0 :: 0 :: List.zeros (offset f_h g_h - (n + 1 + 2)) ++ [0] = List.zeros (offset f_h g_h - n) := by
+      repeat rewrite [←zeros_succ]
+      rewrite [←List.zeros_concat]
+      -- There's definitely redundant code somewhere, but it works
+      have : n + 1 + 2 = n + 3 := by rw [Nat.add_assoc]
+      simp_arith [this]
+      rewrite [Nat.sub_add_eq]
+      suffices h : offset f_h g_h - n ≥ 3 from by rw [Nat.sub_add_cancel h]
+      suffices h : offset f_h g_h ≥ 3 + n from by
+        have := Nat.sub_le_sub_right h n
+        rewrite [Nat.add_sub_cancel 3 n] at this
+        assumption
+      rewrite [Nat.add_comm 3 n]
+      exact by calc
+        offset f_h g_h ≥ n + 1 + 2 := by dsimp [offset]; exact Nat.le_max_left _ _
+                     _ = n + 3 := by rw [Nat.add_assoc]
+    have : List.zeros (n + 1) ++ 0 :: 0 :: (List.zeros (offset f_h g_h - (n + 1 + 2)) ++ 0 :: x :: xs)
+      = List.zeros (n + 1) ++ List.zeros (offset f_h g_h - n) ++ x :: xs := by exact calc
+            List.zeros (n + 1) ++ 0 :: 0 :: (List.zeros (offset f_h g_h - (n + 1 + 2)) ++ 0 :: x :: xs)
+                = List.zeros (n + 1) ++ (0 :: 0 :: List.zeros (offset f_h g_h - (n + 1 + 2)) ++ [0]) ++ x :: xs := by simp
+              _ = List.zeros (n + 1) ++ List.zeros (offset f_h g_h - n) ++ x :: xs := by rw [list_zeros]
+    rewrite [this]
+    have : (xs ++ 0 :: 0 :: (List.zeros (offset f_h g_h - (n + 1 + 2)) ++ 0 :: x :: xs))
+      = xs ++ List.zeros (offset f_h g_h - n) ++ x :: xs := by exact calc
+            xs ++ 0 :: 0 :: (List.zeros (offset f_h g_h - (n + 1 + 2)) ++ 0 :: x :: xs)
+                = xs ++ (0 :: 0 :: List.zeros (offset f_h g_h - (n + 1 + 2)) ++ [0]) ++ x :: xs := by simp
+              _ = xs ++ List.zeros (offset f_h g_h - n) ++ x :: xs := by rw [list_zeros]
+    rewrite [this]
+    --
+    have : List.zeros (n + 1) ++ List.zeros (offset f_h g_h - n) ++ x :: xs
+      = List.zeros (n + 1) ++ (List.zeros (offset f_h g_h - n) ++ [x]) ++ xs := by rewrite [List.append_assoc] ; simp
+    rewrite [this]
+    have : (List.zeros (offset f_h g_h - n) ++ [x]).length = offset f_h g_h - n + 1 := by simp
+    have := lemma_setup (offset f_h g_h - n + 1) n ⟨List.zeros (offset f_h g_h - n) ++ [x], this⟩ ⟨xs, xs_l⟩
+    dsimp [Mathlib.Vector.toList] at this
+    have lemm_eq : n + (offset f_h g_h - n + 1) + 1 = offset f_h g_h + 2 := by
+      simp_arith
+      rewrite [Nat.add_comm]
+      suffices h : n ≤ offset f_h g_h from by exact Nat.sub_add_cancel h
+      exact by calc
+        n ≤ n + 1 + 2 := by simp_arith
+        _  ≤ offset f_h g_h := by dsimp [offset]; exact Nat.le_max_left _ _
+    rewrite [lemm_eq] at this
+
+    rewrite [this]
+    rewrite [←List.cons_append, ←List.cons_append]
+    rewrite [←List.append_assoc]
+    have : offset f_h g_h - n ≥ highest_var p_f - (n + 1) := by
+      have : offset f_h g_h ≥ highest_var p_f := by simp [offset]
+      have : offset f_h g_h - n ≥ highest_var p_f - n := Nat.sub_le_sub_right this n
+      suffices h : highest_var p_f - (n + 1) ≤ highest_var p_f - n from Nat.le_trans h this
+      suffices h : n + 1 ≥ n from Nat.sub_le_sub_left h _
+      simp_arith
+    have := cleanly_computable_append_zeros_append_xs f_h ([x] ++ xs) ⟨xs, xs_l⟩ this
+    simp [init_state] at this
+    simp
+    rw [this]
+
+theorem execution_from_state_prec_program_1_4 (f_h : cleanly_computes p_f f) (g_h : cleanly_computes p_g g) (v : VectNat (n + 1)) :
+    execution_from_state (f v.tail :: v.tail.toList ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: v.toList) (X (offset f_h g_h + 1) += X 0)
+      = f v.tail :: v.tail.toList ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ f v.tail :: v.toList := by
+  exact calc
+    execution_from_state (f v.tail :: v.tail.toList ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: v.toList) (X (offset f_h g_h + 1) += X 0)
+      =
+    execution_from_state ((f v.tail :: v.tail.toList ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 2))) ++ 0 :: v.toList) (X (offset f_h g_h + 1) += X 0) := by simp
+    _ = f v.tail :: v.tail.toList ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ f v.tail :: v.toList := by
+      have : (f v.tail :: v.tail.toList ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 2))).length = offset f_h g_h + 1 := by
+        simp
+        rewrite [Nat.add_comm, Nat.add_assoc, Nat.add_assoc]
+        have : 1 + (1 + n) = n + 2 := by simp_arith
+        rewrite [this]
+        have : offset f_h g_h ≥ n + 2 := by dsimp [offset] ; exact Nat.le_max_left _ _
+        exact Nat.sub_add_cancel this
+      rewrite [inc_X_i_X_j_adds_value this]
+      simp [value_at]
+
+theorem execution_from_state_prec_program_1_5 (f_h : cleanly_computes p_f f) (g_h : cleanly_computes p_g g) (v : VectNat (n + 1)) :
+    execution_from_state (f v.tail :: v.tail.toList ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ f v.tail :: v.toList) (CLEAR X 0)
+      = 0 :: v.tail.toList ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ (f v.tail) :: v.toList := by
+  simp [execution_from_state, clear_value_cons_zero]
+
+theorem execution_from_state_prec_program_1 (f_h : cleanly_computes p_f f) (g_h : cleanly_computes p_g g) (v : VectNat (n + 1)) :
+    execution_from_state (0 :: v.toList ++ 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: 0 :: List.zeros n) (prec_program_1 f_h g_h)
+      = 0 :: v.tail.toList ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ (f v.tail) :: v.toList := by
+  let p_1_1 := store_X_1_to_X_succ_n (offset f_h g_h + 2) n
+  let p_1_2 := clear_X_j_to_X_n_plus_j 1 n
+  let p_1_3 := match n with
+    | 0 => p_f
+    | n + 1 => setup_X_j_to_X_n_plus_j (offset f_h g_h + 2) 1 n ++ p_f
+  let p_1_4 := X (offset f_h g_h + 1) += X 0
+  let p_1_5 := CLEAR X 0
+  have : prec_program_1 f_h g_h = p_1_1 ++ p_1_2 ++ p_1_3 ++ p_1_4 ++ p_1_5 := by
+    dsimp [prec_program_1, p_1_1, p_1_2, p_1_3, p_1_4, p_1_5]
+  rewrite [this]
+  repeat rewrite [concat_is_seq_execution]
+  simp [execution_from_state]
+  dsimp [p_1_1, p_1_2, p_1_3, p_1_4, p_1_5]
+  rewrite [execution_from_state_prec_program_1_1, execution_from_state_prec_program_1_2,
+    execution_from_state_prec_program_1_3, execution_from_state_prec_program_1_4,
+    execution_from_state_prec_program_1_5]
+  simp
+
+-- TODO: check if clear is correct
+-- theorem execution_from_state_prec_program_2_1 (f_h : cleanly_computes p_f f) (g_h : cleanly_computes p_g g) (v : VectNat (n + 1)) :
+--     execution_from_state (0 :: v.tail.toList ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ (f v.tail) :: v.toList) (clear_X_j_to_X_n_plus_j 1 n)
+--       = 0 :: 0 :: 0 :: List.zeros n ++ List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: (f v.tail) :: v.toList := by
+--   have : 0 :: List.zeros (offset f_h g_h - (n + 2)) = List.zeros (offset f_h g_h - (n + 2)) ++ [0] := by rw [←zeros_succ, List.zeros_concat]
+--   have := by exact calc
+--       0 :: v.tail.toList ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ (f v.tail) :: v.toList
+--         = 0 :: v.tail.toList ++ 0 :: (0 :: List.zeros (offset f_h g_h - (n + 2))) ++ (f v.tail) :: v.toList := by simp
+--       _ = 0 :: v.tail.toList ++ 0 :: (List.zeros (offset f_h g_h - (n + 2)) ++ [0]) ++ f v.tail :: v.toList := by rw [this]
+--       _ = 0 :: v.tail.toList ++ 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: (f v.tail) :: v.toList := by simp
+--   rewrite [this]
+--   -- have : highest_var (clear_X_j_to_X_n_plus_j 1 n) ≤ n + 1 := by
+--   --   have : highest_var (clear_X_j_to_X_n_plus_j 1 n) = n + 1 := highest_var_clear
+--   --   rewrite [this]
+--   --   exact Nat.le_refl _
+
+--   -- have := @execution_from_state_gt_highest_append (clear_X_j_to_X_n_plus_j 1 n)
+--   --   (0 :: List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: (f v.tail) :: v.toList) n (0 ::ᵥ v.tail) this
+--   -- simp at this
+--   sorry
+
+
+end prec_is_loop_computable_cleanly_proof
+
+/-
 theorem prec_is_loop_computable_cleanly {f : VectNat n → Nat}
     {g : VectNat (n + 2) → Nat} : loop_computable_cleanly f
     → loop_computable_cleanly g
@@ -87,154 +421,7 @@ theorem prec_is_loop_computable_cleanly {f : VectNat n → Nat}
       v.head.rec (f v.tail) fun y IH => g (y ::ᵥ IH ::ᵥ v.tail) := by
   intro ⟨p_f, f_h⟩ ⟨p_g, g_h⟩
 
-  -- Definitions for the variables that will be used in the program
-  let a := highest_var p_f
-  let b := highest_var p_g
-  let offset := max (n + 2) (max a b)
-  let result := offset + 1
-  let Z := fun j => offset + 2 + j -- from Z 0 to Z n
-
-  -- Part I: construction of the program
-
-  -- Step 1: compute f of the last n inputs and store the result in the
-  -- 'result' variable
-
-  -- -- 1.1: Store inputs
-  -- Note: defined using the recursor instead of 'let rec' construct. This
-  -- allows us to expand the defintion and prove prove properties about the
-  -- function
-  let store_X_1_to_X_succ_n : Nat → Program := Nat.rec
-    (X (Z 0) += X 1)
-    fun n p_n => p_n ++ X (Z (n + 1)) += X (n + 2)
-
-  let p_1_1 := store_X_1_to_X_succ_n n
-
-  -- -- 1.2: Clear inputs
-  let clear_X_j_to_X_n_plus_j (j : Nat) : Nat → Program := Nat.rec
-    (CLEAR X j)
-    fun n p_n => p_n ++ CLEAR X ((n + 1) + j)
-
-  let p_1_2 := clear_X_j_to_X_n_plus_j 1 n
-
-  -- -- 1.3. Setup inputs and execute f
-  let setup_X_j_to_X_n_plus_j (j : Nat) : Nat → Program := Nat.rec
-    (X j += X (Z 1))
-    fun n p_n => p_n ++ X ((n + 1) + j) += X (Z (n + 2))
-
-  let p_1_3 := match n with
-    | 0 => p_f
-    | n + 1 => setup_X_j_to_X_n_plus_j 1 n ++ p_f
-
-  -- -- 1.4. Store result
-  let p_1_4 := X result += X 0
-
-  -- -- 1.5. Clear X 0
-  let p_1_5 := CLEAR X 0
-
-  let p_1 := p_1_1 ++ p_1_2 ++ p_1_3 ++ p_1_4 ++ p_1_5
-
-
-  -- Step 2: compute g counter number of times, for each recursive step
-
-  -- 2.1: Clear inputs
-  let p_2_1 := clear_X_j_to_X_n_plus_j 1 (n + 1)
-
-  -- 2.2: Setup X 2
-  let p_2_2 := X 2 += X result
-
-  -- 2.3: Setup inputs and execute_p_g
-  let p_2_3 : Program := match n with
-    | 0 => p_g
-    | n + 1 => setup_X_j_to_X_n_plus_j 3 n ++ p_g
-
-  -- 2.4: Store result
-  let p_2_4 := CLEAR X result ++ X result += X 0
-
-  -- 2.5: Clear X 0
-  let p_2_5 := CLEAR X 0
-
-  -- 2.6: Increment X 1
-  let p_2_6 := INC X 1
-
-  -- 2.7: Loop
-  let loop_inner := p_2_2 ++ p_2_3 ++ p_2_4 ++ p_2_5 ++ p_2_6
-  let p_2_7 := LOOP X (Z 0) DO loop_inner END
-
-  let p_2 := p_2_1 ++ p_2_7
-
-
-  -- -- Step 3: Clean up
-
-  -- -- 3.1: Setup X 0
-  let p_3_1 := X 0 += X result
-
-  -- -- 3.2: Clear inputs
-  let p_3_2 := clear_X_j_to_X_n_plus_j 1 (n + 1)
-
-  -- -- 3.3: Setup inputs
-  let p_3_3 : Program := match n with
-    | 0 => X 1 += X (Z 0)
-    | n + 1 => X 1 += X (Z 0) ++ setup_X_j_to_X_n_plus_j 2 n
-
-  -- -- 3.4: Clear result
-  let p_3_4 := CLEAR X result
-
-  -- -- 3.5: Clear Z j
-  let clear_Z_0_to_Z_n : Nat → Program := Nat.rec
-    (CLEAR X (Z 0))
-    fun n p_n => p_n ++ CLEAR X (Z (n + 1))
-
-  let p_3_5 : Program := clear_Z_0_to_Z_n n
-
-  let p_3 := p_3_1 ++ p_3_2 ++ p_3_3 ++ p_3_4 ++ p_3_5
-
-  -- Final program
-  let p := p_1 ++ p_2 ++ p_3
-  exists p
-
-  intro v
-
   -- Part II: rewriting to analyise the program more easily
-  have highest_var_store (n : Nat) : highest_var (store_X_1_to_X_succ_n n) = Z n := by
-    induction n
-    case zero =>
-      simp [highest_var, Z]
-    case succ n n_ih =>
-      simp [highest_var, n_ih, Z]
-      have : offset + 2 + (n + 1) = (n + 2) + offset + 1 := by simp_arith
-      rw [this]
-      simp_arith
-
-  have highest_var_clear (j n : Nat) : highest_var (clear_X_j_to_X_n_plus_j j n) = j + n := by
-    induction n
-    case zero =>
-      simp [highest_var]
-    case succ n n_ih =>
-      simp_arith [highest_var, n_ih]
-
-  have highest_var_setup (j n : Nat) : highest_var (setup_X_j_to_X_n_plus_j j n) = Z n := by
-    -- NOT TRUE! j ≤ n + 2
-    sorry
-
-  have highest_var_clear_Z (n : Nat) : highest_var (clear_Z_0_to_Z_n n) = Z n := by
-    induction n
-    case zero =>
-      simp [highest_var]
-    case succ n n_ih =>
-      simp [highest_var, n_ih]
-      simp_arith [Z]
-
-  have highest_var_p_1 : highest_var p_1 = Z n := by
-    simp [p_1, concat_is_seq_execution, highest_var]
-    sorry
-
-  have highest_var_p_2 : highest_var p_2 = Z n := by
-    simp [p_2, concat_is_seq_execution, highest_var]
-    sorry
-
-  have highest_var_p_3 : highest_var p_3 = Z n := by
-    sorry
-
   have : highest_var p = offset + n + 2 := by
     simp [p, concat_is_seq_execution]
     repeat rw [highest_var]
@@ -338,3 +525,4 @@ theorem primrec_is_loop_computable {f : VectNat n → Nat} :
   have := primrec_is_loop_computable_cleanly this
   have := loop_computable_cleanly_is_loop_computable this
   assumption
+-/
