@@ -120,9 +120,7 @@ def prec_program_3 : Program :=
   let p_3_1 := match (generalizing := false) n with
     | 0 => CLEAR X 1
     | n + 1 => CLEAR X 1 ++ clear_X_j_to_X_n_plus_j 3 n
-  let p_3_2 := match (generalizing := false) n with
-    | 0 => X 1 += X (offset + 1)
-    | n + 1 => setup_X_j_to_X_n_plus_j (offset + 1) 2 n
+  let p_3_2 := setup_X_j_to_X_n_plus_j offset 1 n
   let p_3_3 := clear_Z_0_to_Z_n (offset + 1) n
   p_3_1 ++ p_3_2 ++ p_3_3
 
@@ -197,7 +195,7 @@ theorem prec_program_3_highest_var : highest_var (prec_program_3 f_h g_h) = offs
   simp [prec_program_3]
   cases n
   case zero =>
-    simp [inc_X_i_X_j, highest_var]
+    simp [highest_var]
   case succ n =>
     simp [highest_var]
     rewrite [highest_var_clear, highest_var_clear_Z, highest_var_setup]
@@ -242,7 +240,7 @@ theorem execution_from_state_prec_program_1_2 (v : VectNat (n + 1)) :
     (n + 1) ⟨0 :: v.toList, by simp⟩ this
   simp at this
   simp
-  rw [this, clear_X_lemma]
+  rw [this, clear_X_1_lemma]
   simp
 
 theorem execution_from_state_prec_program_1_3 (v : VectNat (n + 1)) :
@@ -316,7 +314,7 @@ theorem execution_from_state_prec_program_1_3 (v : VectNat (n + 1)) :
         _ ≥ 1 := by
           rewrite [Nat.add_comm, Nat.add_comm n, ←Nat.add_assoc, Nat.add_sub_cancel]
           simp_arith
-    have := lemma_setup (offset f_h g_h - n) n ⟨List.zeros (offset f_h g_h - (n + 1)) ++ [x], this⟩ ⟨xs, xs_l⟩
+    have := lemma_setup_X_1 (offset f_h g_h - n) n ⟨List.zeros (offset f_h g_h - (n + 1)) ++ [x], this⟩ ⟨xs, xs_l⟩
     dsimp [Mathlib.Vector.toList] at this
 
     have lemm_eq : n + (offset f_h g_h - n) + 1 = offset f_h g_h + 1 := by
@@ -357,131 +355,285 @@ theorem execution_from_state_prec_program_1 (v : VectNat (n + 1)) :
     execution_from_state_prec_program_1_3]
   simp
 
--- 0 :: 0 :: 0 :: List.zeros n ++ List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: (f v.tail) :: v.toList
--- 0 :: k :: 0 :: List.zeros n ++ List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: (f v.tail) :: v.toList
--- theorem execution_from_state_prec_program_2_1 : 2 = 3 := by
---   sorry
+theorem execution_from_state_prec_program_2_1 (R k : Nat) (v : VectNat (n + 1)) :
+    execution_from_state (R :: k :: 0 :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList) (X 2 += X 0)
+      = R :: k :: R :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList := by
+  exact calc
+      execution_from_state (R :: k :: 0 :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList) (X 2 += X 0)
+    = execution_from_state ([R, k] ++ 0 :: (v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList)) (X 2 += X 0) := by simp
+  _ = R :: k :: R :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList := by
+      have : [R, k].length = 2 := rfl
+      rewrite [inc_X_i_X_j_adds_value this]
+      simp [value_at]
 
--- TODO: check if clear is correct
--- theorem execution_from_state_prec_program_2_1 (f_h : cleanly_computes p_f f) (g_h : cleanly_computes p_g g) (v : VectNat (n + 1)) :
---     execution_from_state (0 :: v.tail.toList ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ (f v.tail) :: v.toList) (clear_X_j_to_X_n_plus_j 1 n)
---       = 0 :: 0 :: 0 :: List.zeros n ++ List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: (f v.tail) :: v.toList := by
---   have : 0 :: List.zeros (offset f_h g_h - (n + 2)) = List.zeros (offset f_h g_h - (n + 2)) ++ [0] := by rw [←zeros_succ, List.zeros_concat]
---   have := by exact calc
---       0 :: v.tail.toList ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ (f v.tail) :: v.toList
---         = 0 :: v.tail.toList ++ 0 :: (0 :: List.zeros (offset f_h g_h - (n + 2))) ++ (f v.tail) :: v.toList := by simp
---       _ = 0 :: v.tail.toList ++ 0 :: (List.zeros (offset f_h g_h - (n + 2)) ++ [0]) ++ f v.tail :: v.toList := by rw [this]
---       _ = 0 :: v.tail.toList ++ 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: (f v.tail) :: v.toList := by simp
---   rewrite [this]
---   -- have : highest_var (clear_X_j_to_X_n_plus_j 1 n) ≤ n + 1 := by
---   --   have : highest_var (clear_X_j_to_X_n_plus_j 1 n) = n + 1 := highest_var_clear
---   --   rewrite [this]
---   --   exact Nat.le_refl _
+theorem execution_from_state_prec_program_2_2 (R k : Nat) (v : VectNat (n + 1)) :
+    execution_from_state (R :: k :: R :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList) (CLEAR X 0)
+      = 0 :: k :: R :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList := by
+  simp [execution_from_state, clear_value]
 
---   -- have := @execution_from_state_gt_highest_append (clear_X_j_to_X_n_plus_j 1 n)
---   --   (0 :: List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: (f v.tail) :: v.toList) n (0 ::ᵥ v.tail) this
---   -- simp at this
---   sorry
+theorem execution_from_state_prec_program_2_3 (R k : Nat) (v : VectNat (n + 1)) :
+    execution_from_state (0 :: k :: R :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList) p_g
+      = g (k ::ᵥ R ::ᵥ v.tail) :: k :: R :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList := by
+  have : offset f_h g_h - (n + 2) ≥ highest_var p_g - (n + 2) := by
+    have : offset f_h g_h ≥ highest_var p_g := by simp [offset]
+    exact Nat.sub_le_sub_right this (n + 2)
+  have := cleanly_computable_append_zeros_append_xs g_h v.toList (k ::ᵥ R ::ᵥ v.tail) this
+  simp [init_state] at this
+  simp
+  exact this
 
+theorem execution_from_state_prec_program_2_4 (R k : Nat) (v : VectNat (n + 1)) :
+    execution_from_state (g (k ::ᵥ R ::ᵥ v.tail) :: k :: R :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList) (CLEAR X 2)
+      = g (k ::ᵥ R ::ᵥ v.tail) :: k :: 0 :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList := by
+  simp [execution_from_state, clear_value]
 
-end prec_is_loop_computable_cleanly_proof
+theorem execution_from_state_prec_program_2_5 (R k : Nat) (v : VectNat (n + 1)) :
+    execution_from_state (g (k ::ᵥ R ::ᵥ v.tail) :: k :: 0 :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList) (INC X 1)
+      = g (k ::ᵥ R ::ᵥ v.tail) :: (k + 1) :: 0 :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList := by
+  simp [execution_from_state, inc_value]
 
-/-
-theorem prec_is_loop_computable_cleanly {f : VectNat n → Nat}
-    {g : VectNat (n + 2) → Nat} : loop_computable_cleanly f
+theorem execution_from_state_prec_program_loop_inner (R k : Nat) (v : VectNat (n + 1)) :
+  execution_from_state (R :: k :: 0 :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList) (X 2 += X 0 ++ CLEAR X 0 ++ p_g ++ CLEAR X 2 ++ INC X 1)
+      = g (k ::ᵥ R ::ᵥ v.tail) :: (k + 1) :: 0 :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList := by
+  repeat rewrite [concat_is_seq_execution]
+  repeat rewrite [seq_execution_unfold]
+  rw [execution_from_state_prec_program_2_1, execution_from_state_prec_program_2_2,
+    execution_from_state_prec_program_2_3, execution_from_state_prec_program_2_4,
+      execution_from_state_prec_program_2_5]
+
+theorem execution_from_state_prec_program_loop (v : VectNat (n + 1)) :
+  execution_from_state (f v.tail :: 0 :: 0 :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList)
+      (LOOP X (offset f_h g_h + 1) DO (X 2 += X 0 ++ CLEAR X 0 ++ p_g ++ CLEAR X 2 ++ INC X 1) END)
+    = (v.head.rec (f v.tail) fun y IH => g (y ::ᵥ IH ::ᵥ v.tail)) :: v.head :: 0 :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList := by
+  let ⟨x :: xs, xs_l⟩ := v
+
+  simp at xs_l
+  dsimp [Mathlib.Vector.tail, Mathlib.Vector.head]
+  simp [execution_from_state]
+  have : value_at (f ⟨xs, xs_l⟩ :: 0 :: 0 :: (xs ++ (List.zeros (offset f_h g_h - (n + 2)) ++ x :: xs))) (offset f_h g_h + 1)
+      = x := by
+    exact calc
+          value_at (f ⟨xs, xs_l⟩ :: 0 :: 0 :: (xs ++ (List.zeros (offset f_h g_h - (n + 2)) ++ x :: xs))) (offset f_h g_h + 1)
+        = value_at ((f ⟨xs, xs_l⟩ :: 0 :: 0 :: xs ++ List.zeros (offset f_h g_h - (n + 2))) ++ x :: xs) (offset f_h g_h + 1) := by simp
+      _ = x := by
+          have : (f ⟨xs, xs_l⟩ :: 0 :: 0 :: xs ++ List.zeros (offset f_h g_h - (n + 2))).length = offset f_h g_h + 1 := by
+            simp [xs_l]
+            rewrite [Nat.add_assoc, Nat.add_comm _ 2, ←Nat.add_assoc, Nat.add_comm, Nat.add_comm 2 n]
+            suffices h : offset f_h g_h ≥ n + 2 from Nat.sub_add_cancel h
+            simp [offset]
+          exact value_at_n this
+
+  rewrite [this]
+  suffices h : ∀ k : Nat, loop_n_times k (f ⟨xs, xs_l⟩ :: 0 :: 0 :: (xs ++ (List.zeros (offset f_h g_h - (n + 2)) ++ x :: xs)))
+      (X 2 += X 0 ++ CLEAR X 0 ++ p_g ++ CLEAR X 2 ++ INC X 1)
+      = Nat.rec (f ⟨xs, xs_l⟩) (fun y IH ↦ g (y ::ᵥ IH ::ᵥ ⟨xs, xs_l⟩)) k :: k :: 0 :: (xs ++ (List.zeros (offset f_h g_h - (n + 2)) ++ x :: xs)) from h x
+  intro k
+  induction k
+  case zero =>
+    simp [loop_n_times]
+  case succ k k_ih =>
+    rewrite [loop_n_times_loop, k_ih]
+    have := execution_from_state_prec_program_loop_inner f_h g_h
+      (Nat.rec (f ⟨xs, xs_l⟩) (fun y IH ↦ g (y ::ᵥ IH ::ᵥ ⟨xs, xs_l⟩)) k)
+      k ⟨x :: xs, by simp [xs_l]⟩
+    simp [Mathlib.Vector.tail, Mathlib.Vector.toList] at this
+    simp
+    rw [this]
+
+theorem execution_from_state_prec_program_2 (v : VectNat (n + 1)) :
+    execution_from_state (f v.tail :: v.tail.toList ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ v.toList) (prec_program_2 f_h g_h)
+      = (v.head.rec (f v.tail) fun y IH => g (y ::ᵥ IH ::ᵥ v.tail)) :: v.head :: 0 :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList := by
+  dsimp [prec_program_2]
+  cases n
+  case zero =>
+    simp
+    have := execution_from_state_prec_program_loop f_h g_h v
+    simp at this
+    rw [this]
+  case succ n =>
+    dsimp
+    repeat rewrite [concat_is_seq_execution]
+    repeat rewrite [seq_execution_unfold]
+    suffices h : execution_from_state
+      (execution_from_state
+        (f (Mathlib.Vector.tail v) ::
+          ((Mathlib.Vector.tail v).toList ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 1 + 2)) ++
+            Mathlib.Vector.toList v))
+        (clear_X_j_to_X_n_plus_j 1 n))
+          (setup_X_j_to_X_n_plus_j (offset f_h g_h + 1) 3 n)
+        = f v.tail :: 0 :: 0 :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 1 + 2)) ++ v.toList from by
+      rewrite [h]
+      have := execution_from_state_prec_program_loop f_h g_h v
+      simp [concat_is_seq_execution] at this
+      simp
+      rw [this]
+    let ⟨x :: xs, xs_l⟩ := v
+    simp_arith at xs_l
+    dsimp [Mathlib.Vector.tail]
+
+    have := calc
+        execution_from_state (f ⟨xs, xs_l⟩ :: (xs ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 1 + 2)) ++ x :: xs))
+          (clear_X_j_to_X_n_plus_j 1 n)
+        = execution_from_state ((f ⟨xs, xs_l⟩ :: xs) ++ (0 :: 0 :: List.zeros (offset f_h g_h - (n + 1 + 2)) ++ x :: xs))
+         (clear_X_j_to_X_n_plus_j 1 n) := by simp
+      _ = (execution_from_state (f ⟨xs, xs_l⟩ :: xs) (clear_X_j_to_X_n_plus_j 1 n))
+        ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 1 + 2)) ++ x :: xs := by
+          have h := @execution_from_state_gt_highest_append (clear_X_j_to_X_n_plus_j 1 n)
+            (0 :: 0 :: List.zeros (offset f_h g_h - (n + 1 + 2)) ++ x :: xs)
+            (n + 1) (f ⟨xs, xs_l⟩ ::ᵥ ⟨xs, xs_l⟩) (by rw [highest_var_clear])
+          have : (f ⟨xs, xs_l⟩ ::ᵥ ⟨xs, xs_l⟩).toList = f ⟨xs, xs_l⟩ :: xs := by simp
+          rewrite [this] at h
+          rw [h]
+          simp
+      _ = f ⟨xs, xs_l⟩ :: List.zeros (n + 1) ++ 0 :: 0 :: List.zeros (offset f_h g_h - (n + 1 + 2)) ++ x :: xs := by
+          suffices h : execution_from_state (f ⟨xs, xs_l⟩ :: xs) (clear_X_j_to_X_n_plus_j 1 n) = f ⟨xs, xs_l⟩ :: List.zeros (n + 1) from by rw [h]
+          rw [clear_X_succ]
+          let v' : VectNat (n + 1) := ⟨xs, xs_l⟩
+          have : execution_from_state xs (clear_X_j_to_X_n_plus_j 0 n)
+            = execution_from_state (v'.toList) (clear_X_j_to_X_n_plus_j 0 n) := by simp [v']
+          rw [this, clear_X_lemma]
+      _ = f ⟨xs, xs_l⟩ ::(List.zeros (n + 1) ++ [0] ++ [0]) ++ List.zeros (offset f_h g_h - (n + 1 + 2)) ++ x :: xs := by simp
+      _ = f ⟨xs, xs_l⟩ :: List.zeros (n + 3) ++ List.zeros (offset f_h g_h - (n + 1 + 2)) ++ x :: xs := by rw [←List.zeros_concat, ←List.zeros_concat]
+      _ = f ⟨xs, xs_l⟩ ::  0 :: 0 :: List.zeros (n + 1) ++ List.zeros (offset f_h g_h - (n + 1 + 2)) ++ x :: xs := by rw [zeros_succ, zeros_succ]
+      _ = f ⟨xs, xs_l⟩ ::  (0 :: (0 :: (List.zeros (n + 1) ++ List.zeros (offset f_h g_h - (n + 1 + 2)) ++ [x] ++ xs))) := by simp
+      _ = f ⟨xs, xs_l⟩ ::  (0 :: (0 :: (List.zeros (n + 1) ++ (List.zeros (offset f_h g_h - (n + 1 + 2)) ++ [x]) ++ xs))) := by repeat rw [List.append_assoc]
+
+    rewrite [this]
+    have : offset f_h g_h + 1 = (offset f_h g_h - 2) + 3 := by
+      suffices h : offset f_h g_h ≥ 2 from by exact calc
+        offset f_h g_h + 1 = (offset f_h g_h - 2 + 2) + 1 := by rw [Nat.sub_add_cancel h]
+                         _ = (offset f_h g_h - 2) + 3 := by simp_arith
+      simp_arith [offset]
+    rewrite [this]
+    repeat rewrite [setup_X_succ]
+    have := lemma_setup (offset f_h g_h - (n + 1 + 2) + 1) n ⟨List.zeros (offset f_h g_h - (n + 1 + 2)) ++ [x], by simp⟩ ⟨xs, xs_l⟩
+    dsimp at this
+    have h_eq : n + (offset f_h g_h - (n + 1 + 2) + 1) = offset f_h g_h - 2 := by
+      rewrite [Nat.add_comm (n + 1), Nat.add_comm, Nat.add_assoc, Nat.add_comm 1 n, Nat.sub_add_eq]
+      suffices h : offset f_h g_h - 2 ≥ n + 1 from Nat.sub_add_cancel h
+      have : offset f_h g_h ≥ n + 2 + 1 := by simp [offset]
+      have := Nat.sub_le_sub_right this 2
+      have h : n + 2 + 1 - 2 = n + 1 := by simp
+      rewrite [h] at this
+      assumption
+    rewrite [h_eq] at this
+    rewrite [this]
+    simp
+
+theorem execution_from_state_prec_program_3_1 (R : Nat) (v : VectNat (n + 1)) :
+    execution_from_state (R :: v.head :: 0 :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList) (match (generalizing := false) n with | 0 => CLEAR X 1 | n + 1 => CLEAR X 1 ++ clear_X_j_to_X_n_plus_j 3 n)
+        = R :: 0 :: 0 :: List.zeros n ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList := by
+  cases n
+  case zero =>
+    simp [execution_from_state, clear_value]
+  case succ n =>
+    simp [concat_is_seq_execution, execution_from_state, clear_value]
+    repeat rewrite [←List.append_assoc]
+    repeat rewrite [clear_X_succ]
+    rewrite [List.append_assoc]
+    have : highest_var (clear_X_j_to_X_n_plus_j 0 n) ≤ n := by simp [highest_var_clear]
+    rewrite [execution_from_state_gt_highest_append v.tail this]
+    rewrite [clear_X_lemma]
+    rewrite [←List.append_assoc]
+    rw [append_zeros_addition (n + 1) ((offset f_h g_h - (n + 1 + 2))) ((n + 1 + (offset f_h g_h - (n + 1 + 2)))) (by simp)]
+
+theorem execution_from_state_prec_program_3_2 (R : Nat) (v : VectNat (n + 1)) :
+    execution_from_state (R :: 0 :: 0 :: List.zeros n ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList) (setup_X_j_to_X_n_plus_j (offset f_h g_h) 1 n)
+        = R :: v.toList ++ List.zeros (offset f_h g_h - (n + 1)) ++ v.toList := by
+  have h_eq : offset f_h g_h = offset f_h g_h - 1 + 1 := by
+    suffices h : offset f_h g_h ≥ 1 from (Nat.sub_add_cancel h).symm
+    simp_arith [offset]
+  rewrite [h_eq]
+  repeat rewrite [List.cons_append]
+  rewrite [setup_X_succ]
+  repeat rewrite [←List.cons_append]
+  rewrite [←zeros_succ, ←zeros_succ, List.zeros_concat, h_eq.symm]
+  simp
+  rewrite [←List.cons_append, ←zeros_succ]
+  have : offset f_h g_h - (n + 2) + 1 = offset f_h g_h - (n + 1) := by
+    have : n + 2 = (n + 1) + 1 := rfl
+    rewrite [this, Nat.sub_add_eq]
+    suffices h : offset f_h g_h - (n + 1) ≥ 1 from Nat.sub_add_cancel h
+    have : offset f_h g_h ≥ n + 2 := by simp [offset]
+    have := Nat.sub_le_sub_right this (n + 1)
+    have h : n + 2 - (n + 1) = 1 := by simp_arith
+    rewrite [h] at this
+    assumption
+  rewrite [this]
+  have : (List.zeros (offset f_h g_h - (n + 1))).length = offset f_h g_h - (n + 1) := by simp
+  have h_l := lemma_setup (offset f_h g_h - (n + 1)) n ⟨List.zeros (offset f_h g_h - (n + 1)), this⟩ v
+  have : n + (offset f_h g_h - (n + 1)) = offset f_h g_h - 1 := by
+    rewrite [Nat.add_comm n 1]
+    rewrite [Nat.add_comm, Nat.sub_add_eq]
+    suffices h : offset f_h g_h - 1 ≥ n from Nat.sub_add_cancel h
+    have : offset f_h g_h ≥ n + 1 := by simp [offset]
+    have := Nat.sub_le_sub_right this 1
+    rewrite [Nat.add_sub_cancel] at this
+    assumption
+  rewrite [this] at h_l
+  dsimp at h_l
+  repeat rewrite [List.append_assoc] at h_l
+  rw [h_l]
+
+theorem execution_from_state_prec_program_3_3 (R : Nat) (v : VectNat (n + 1)) :
+    execution_from_state (R :: v.toList ++ List.zeros (offset f_h g_h - (n + 1)) ++ v.toList) (clear_Z_0_to_Z_n (offset f_h g_h + 1) n)
+        = R :: v.toList ++ List.zeros (offset f_h g_h) := by
+  have : (R :: v.toList ++ List.zeros (offset f_h g_h - (n + 1))).length = offset f_h g_h + 1 := by simp [offset]
+  rewrite [clear_Z_lemma v this]
+  simp [offset]
+
+theorem execution_from_state_prec_program_3 (v : VectNat (n + 1)) :
+  execution_from_state ((v.head.rec (f v.tail) fun y IH => g (y ::ᵥ IH ::ᵥ v.tail)) :: v.head :: 0 :: v.tail.toList ++ List.zeros (offset f_h g_h - (n + 2)) ++ v.toList) (prec_program_3 f_h g_h)
+    = (v.head.rec (f v.tail) fun y IH => g (y ::ᵥ IH ::ᵥ v.tail)) :: v.toList ++ List.zeros (offset f_h g_h) := by
+  dsimp [prec_program_3]
+  repeat rewrite [concat_is_seq_execution]
+  simp [execution_from_state]
+  repeat rewrite [←List.cons_append]
+  repeat rewrite [←List.append_assoc]
+  rw [execution_from_state_prec_program_3_1, execution_from_state_prec_program_3_2,
+    execution_from_state_prec_program_3_3]
+
+theorem execution_from_state_prec_program (v : VectNat (n + 1)) :
+    execution_from_state (0 :: v.toList ++ 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: List.zeros n) (prec_program f_h g_h)
+      = (v.head.rec (f v.tail) fun y IH => g (y ::ᵥ IH ::ᵥ v.tail)) :: v.toList ++ List.zeros (offset f_h g_h) := by
+  dsimp [prec_program]
+  repeat rewrite [concat_is_seq_execution]
+  simp [execution_from_state]
+  repeat rewrite [←List.cons_append]
+  repeat rewrite [←List.append_assoc]
+  rw [execution_from_state_prec_program_1, execution_from_state_prec_program_2,
+   execution_from_state_prec_program_3]
+
+theorem prec_is_loop_computable_cleanly : loop_computable_cleanly f
     → loop_computable_cleanly g
     → loop_computable_cleanly fun v : VectNat (n + 1) =>
       v.head.rec (f v.tail) fun y IH => g (y ::ᵥ IH ::ᵥ v.tail) := by
   intro ⟨p_f, f_h⟩ ⟨p_g, g_h⟩
+  exists prec_program f_h g_h
+  intro v
+  rewrite [prec_program_highest_var]
+  have : offset f_h g_h + 1 + n - (n + 1) = offset f_h g_h := by
+    rewrite [Nat.add_assoc, Nat.add_comm 1 n]
+    rw [Nat.add_sub_cancel]
+  rewrite [this]
+  have : offset f_h g_h = offset f_h g_h - (n + 2) + (n + 1) + 1 := by
+    rewrite [Nat.add_assoc]
+    suffices h : offset f_h g_h ≥ n + 2 from (Nat.sub_add_cancel h).symm
+    simp [offset]
+  have : init_state v ++ List.zeros (offset f_h g_h)
+      = 0 :: v.toList ++ 0 :: List.zeros (offset f_h g_h - (n + 2)) ++ 0 :: List.zeros n := by
+    dsimp [init_state]
+    rewrite [this]
+    rewrite [zeros_succ]
+    rewrite [←append_zeros_addition (offset f_h g_h - (n + 2)) (n + 1) (offset f_h g_h - (n + 2) + (n + 1)) rfl]
+    rewrite [zeros_succ]
+    simp
+  rewrite [this]
+  rw [execution_from_state_prec_program]
 
-  -- Part II: rewriting to analyise the program more easily
-  have : highest_var p = offset + n + 2 := by
-    simp [p, concat_is_seq_execution]
-    repeat rw [highest_var]
-    rw [highest_var_p_1, highest_var_p_2, highest_var_p_3]
-    simp_arith [Z]
-  rw [this]
-  have : offset + n + 2 - (n + 1) = 1 + offset := by calc
-    offset + n + 2 - (n + 1)
-      = offset + ((n + 1) + 1) - (n + 1) := rfl
-    _ = offset + (1 + (n + 1)) - (n + 1) := by rw [Nat.add_comm (n + 1) 1]
-    _ = offset + 1 + (n + 1) - (n + 1) := by rw [Nat.add_assoc]
-    _ = offset + 1 := Nat.add_sub_self_right _ _
-    _ = 1 + offset := Nat.add_comm offset 1
-  rw [this]
-  let padding := offset - (n + 2)
-  have : offset = padding + (1 + (n + 1)) := by
-    simp [offset, padding]
-    have : 1 + (n + 1) = n + 2 := Nat.add_comm _ _
-    rw [this]
-    simp [Nat.add_sub_self_right]
-  rw [this]
-  rw [init_state]
-  have : List.zeros (1 + (padding + (1 + (n + 1)))) = 0 :: List.zeros (padding + (1 + (n + 1))) := by rw [Nat.add_comm, zeros_succ]
-  rw [this, ←append_zeros_addition padding (1 + (n + 1)) (padding + (1 + (n + 1))) rfl]
-  have : List.zeros (1 + (n + 1)) = 0 :: 0 :: List.zeros n := by rw [Nat.add_comm, zeros_succ, zeros_succ]
-  rw [this]
-  have : 0 :: v.toList ++ 0 :: (List.zeros padding ++ 0 :: 0 :: List.zeros n)
-    = 0 :: v.toList ++ 0 :: List.zeros padding ++ 0 :: 0 :: List.zeros n := by simp
-  repeat rw [this]
-  let h : VectNat (n + 1) → Nat := fun v => Nat.rec (f v.tail) (fun y IH => g (y ::ᵥ IH ::ᵥ v.tail)) v.head
-  have : (fun v =>
-    Nat.rec (f (Mathlib.Vector.tail v)) (fun y IH => g (y ::ᵥ IH ::ᵥ Mathlib.Vector.tail v))
-    (Mathlib.Vector.head v)) v = h v := rfl
-  rw [this]
-  -- let ⟨x :: xs, v_length⟩ := v
-  -- simp
-  -- let w : VectNat n := ⟨xs, by simp at v_length; exact v_length⟩
-  -- have : ⟨x :: xs, v_length⟩ = x ::ᵥ w := rfl
-  -- rw [this]
-  -- Part three: analyse each part of the program
+end prec_is_loop_computable_cleanly_proof
 
-
-  have execution_p_1_1 : execution_from_state (0 :: v.toList ++ 0 :: List.zeros padding ++ 0 :: 0 :: List.zeros n) p_1_1
-      = 0 :: v.toList ++ 0 :: List.zeros padding ++ 0 :: v.toList := by
-    sorry
-
-  have execution_p_1_2 : execution_from_state (0 :: v.toList ++ 0 :: List.zeros padding ++ 0 :: v.toList) p_1_2
-      = 0 :: List.zeros (n + 1) ++ 0 :: List.zeros padding ++ 0 :: v.toList := by
-    sorry
-
-  have execution_p_1_3 : execution_from_state (0 :: List.zeros (n + 1) ++ 0 :: List.zeros padding ++ 0 :: v.toList) p_1_3
-      = (f v.tail) :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ 0 :: v.toList := by
-    sorry
-
-  have execution_p_1_4 : execution_from_state ((f v.tail) :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ 0 :: v.toList) p_1_4
-      = (f v.tail) :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ (f v.tail) :: v.toList := by
-    sorry
-
-  have execution_p_1_5 : execution_from_state ((f v.tail) :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ (f v.tail) :: v.toList) p_1_5
-      = 0 :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ (f v.tail) :: v.toList := by
-    simp [p_1_5, execution_from_state]
-    rw [clear_value_cons_zero]
-
-  have execution_p_1 : execution_from_state (0 :: v.toList ++ 0 :: List.zeros padding ++ 0 :: 0 :: List.zeros n) p_1
-      = 0 :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ (f v.tail) :: v.toList := by
-    exact calc
-      execution_from_state (0 :: v.toList ++ 0 :: List.zeros padding ++ 0 :: 0 :: List.zeros n) p_1
-        =
-      execution_from_state (0 :: v.toList ++ 0 :: List.zeros padding ++ 0 :: 0 :: List.zeros n) (p_1_1 ++ p_1_2 ++ p_1_3 ++ p_1_4 ++ p_1_5) := rfl
-      _ =
-      execution_from_state (0 :: v.toList ++ 0 :: List.zeros padding ++ 0 :: v.toList) (p_1_2 ++ p_1_3 ++ p_1_4 ++ p_1_5)  := by sorry
-      _ =
-      execution_from_state (0 :: List.zeros (n + 1) ++ 0 :: List.zeros padding ++ 0 :: v.toList) (p_1_3 ++ p_1_4 ++ p_1_5) := by sorry
-      _ =
-      execution_from_state ((f v.tail) :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ 0 :: v.toList) (p_1_4 ++ p_1_5) := by sorry
-      _ =
-      execution_from_state ((f v.tail) :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ (f v.tail) :: v.toList) p_1_5 := by sorry
-      _ =
-      0 :: v.tail.toList ++ 0 :: 0 :: List.zeros padding ++ (f v.tail) :: v.toList := execution_p_1_5
-
-  --
-
-
-
-
-  sorry
-
+/-
 theorem primrec_is_loop_computable_cleanly : Nat.Primrec' f → loop_computable_cleanly f := by
   intro h
   induction h
