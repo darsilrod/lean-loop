@@ -887,3 +887,37 @@ theorem lemma_setup_X_1 : ∀ c n : Nat, ∀ w : VectNat c, ∀ v : VectNat (n +
   rewrite [setup_X_succ]
   repeat rewrite [←List.append_assoc]
   rw [lemma_setup]
+
+--
+theorem forall_exists_function {n : Nat} (g : Fin n → VectNat m → Nat)
+    (g_h : ∀ i : Fin n, loop_computable_cleanly (g i)) :
+    ∃ p_g : Fin n → Program, ∀ i, cleanly_computes (p_g i) (g i) := by
+  induction n
+  case zero =>
+    exists Fin.elim0
+    intro i
+    exact i.elim0
+  case succ n n_ih =>
+    let g' : Fin n → VectNat m → Nat := fun i => g i
+    have ⟨p_g', g_g'_h⟩ := n_ih g' (fun i => g_h i)
+    have ⟨p_g_n, p_g_n_h⟩ := g_h ⟨n, Nat.lt_succ_self n⟩
+
+    let p_g : Fin (n + 1) → Program := fun i => match (Nat.decLt i.val n) with
+      | isTrue h => p_g' ⟨i.val, h⟩
+      | isFalse _ => p_g_n
+
+    exists p_g
+    intro i
+    dsimp [p_g]
+    cases (Nat.decLt i.val n)
+    case isTrue h =>
+      dsimp
+      have r := g_g'_h ⟨i.val, h⟩
+      have : g' ⟨i.val, h⟩ = g i := by simp [g']
+      rewrite [this] at r
+      assumption
+    case isFalse h =>
+      dsimp
+      suffices h : ⟨n, Nat.lt_succ_self n⟩ = i from by rewrite [h] at p_g_n_h; assumption
+      suffices h : n = i.val from Fin.eq_of_val_eq h
+      exact Nat.le_antisymm (Nat.ge_of_not_lt h) (Nat.le_of_lt_succ i.2)
