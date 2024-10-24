@@ -648,11 +648,7 @@ section comp_is_loop_computable_cleanly_proof
 
 def highest_var_p_g {n : Nat} (p_g : Fin n → Program) : Nat := match n with
   | 0 => 0
-  | n + 1 =>
-    let p_g_succ_n := p_g ⟨n, Nat.lt_succ_self n⟩
-    let p_g' : Fin n → Program
-      | ⟨k, p⟩ => p_g ⟨k, Nat.lt_trans p (Nat.lt_succ_self n)⟩
-    max (highest_var p_g_succ_n) (highest_var_p_g p_g')
+  | _ + 1 => max (highest_var (p_g 0)) (highest_var_p_g (fun i => p_g i.succ))
 
 -- -- A bit different from offset_prec. It needs to know m, n, p_g and p_f. It
 -- -- takes three explicit arguments: m, p_f and p_g (from which n is obtained).
@@ -667,29 +663,31 @@ theorem highest_var_p_g_ge_highest_var_p_g_i {p_g : Fin n → Program} :
     contradiction
   case succ n n_ih =>
     intro ⟨k, p⟩
-    let p_g' : Fin n → Program
-      | ⟨k, p⟩ => p_g ⟨k, Nat.lt_trans p (Nat.lt_succ_self n)⟩
-    have : highest_var_p_g p_g = max (highest_var (p_g ⟨n, Nat.lt_succ_self n⟩)) (highest_var_p_g p_g') := by dsimp [highest_var_p_g]
+  --   let p_g' : Fin n → Program
+  --     | ⟨k, p⟩ => p_g ⟨k, Nat.lt_trans p (Nat.lt_succ_self n)⟩
+    have : highest_var_p_g p_g = max (highest_var (p_g 0)) (highest_var_p_g (fun i => p_g i.succ)) := rfl
     rewrite [this]
-    cases (Nat.decEq k n)
+    cases (Nat.decEq k 0)
     case isTrue h =>
-      have : (⟨k, p⟩ : Fin (n + 1)) = ⟨n, Nat.lt_succ_self n⟩ := Fin.eq_of_val_eq h
+      have : (⟨k, p⟩ : Fin (n + 1)) = 0 := Fin.eq_of_val_eq h
       rewrite [this]
       exact Nat.le_max_left _ _
     case isFalse h =>
-      suffices h' : highest_var (p_g ⟨k, p⟩) ≤ highest_var_p_g p_g' from by simp [h']
-      have p' : k < n := by
-        cases (Nat.decLt k n)
-        case isTrue h =>
-          exact h
-        case isFalse h' =>
-          rewrite [Nat.not_lt_eq k n] at h'
-          have : k ≤ n := Nat.le_of_lt_succ p
-          have : k = n := Nat.le_antisymm this h'
-          contradiction
-      have : p_g ⟨k, p⟩ = p_g' ⟨k, p'⟩ := by dsimp
+      suffices h' : highest_var (p_g ⟨k, p⟩) ≤ highest_var_p_g (fun i => p_g i.succ) from by simp [h']
+      have : (k - 1) + 1 = k := Nat.succ_pred h
+      have p' : k - 1 < n := by
+        rewrite [this.symm] at p
+        exact Nat.lt_of_succ_lt_succ p
+      have : (p_g ⟨k, p⟩) = (fun i : Fin n => p_g i.succ) ⟨k - 1, p'⟩ := by
+        simp
+        have p'' : k - 1 + 1 < n + 1:= by rewrite [this.symm] at p; assumption
+        have : (⟨k, p⟩ : Fin (n + 1)) = ⟨k - 1 + 1, p''⟩ := Fin.eq_of_val_eq this.symm
+        exact congrArg p_g this
       rewrite [this]
-      exact n_ih ⟨k, p'⟩
+      have := @n_ih (fun i : Fin n => p_g i.succ) ⟨k - 1, p'⟩
+      simp
+      simp at this
+      assumption
 
 -- -- 0 :: v.toList ++ List.zeros (offset_comp m p_g p_f - m) ++ List.zeros m ++ List.zeros n
 
@@ -698,7 +696,58 @@ def execution_from_state_comp_store_succ_m_inputs (m : Nat) (p_g : Fin n → Pro
     execution_from_state (0 :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ List.zeros (m + 1) ++ List.zeros n)
     (store_X_1_to_X_succ_n (offset_comp (m + 1) p_g p_f + 1) m)
       = 0 :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ v.toList ++ List.zeros n := by
-  sorry
+  have h : offset_comp (m + 1) p_g p_f - (m + 1) + (m + 1) = offset_comp (m + 1) p_g p_f := by
+    suffices h : offset_comp (m + 1) p_g p_f ≥ m + 1 from Nat.sub_add_cancel h
+    simp_arith [offset_comp]
+  exact calc
+    execution_from_state (0 :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ List.zeros (m + 1) ++ List.zeros n)
+      (store_X_1_to_X_succ_n (offset_comp (m + 1) p_g p_f + 1) m)
+        =
+    execution_from_state ((0 :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ List.zeros (m + 1)) ++ List.zeros n)
+      (store_X_1_to_X_succ_n (offset_comp (m + 1) p_g p_f + 1) m)
+      := by simp
+      _ =
+    (execution_from_state (0 :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ List.zeros (m + 1))
+      (store_X_1_to_X_succ_n (offset_comp (m + 1) p_g p_f + 1) m)) ++ List.zeros n
+      := by
+          have h : (0 :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ List.zeros (m + 1)).length
+            = offset_comp (m + 1) p_g p_f + (m + 1) + 1 := by
+              simp
+              rewrite [h]
+              simp_arith
+          have : highest_var (store_X_1_to_X_succ_n (offset_comp (m + 1) p_g p_f + 1) m)
+            = offset_comp (m + 1) p_g p_f + (m + 1) := by
+              rewrite [highest_var_store]
+              suffices h : offset_comp (m + 1) p_g p_f + 1 + m ≥ m + 1 from by
+                rw [Nat.max_eq_right h, Nat.add_comm m 1, Nat.add_assoc]
+              simp_arith
+          have : offset_comp (m + 1) p_g p_f + (m + 1) ≥ highest_var (store_X_1_to_X_succ_n (offset_comp (m + 1) p_g p_f + 1) m) := by
+            rw [this]
+          have := @execution_from_state_gt_highest_append (store_X_1_to_X_succ_n (offset_comp (m + 1) p_g p_f + 1) m)
+            (List.zeros n) (offset_comp (m + 1) p_g p_f + (m + 1))
+            ⟨0 :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ List.zeros (m + 1), h⟩
+            this
+          simp at this
+          simp
+          rw [this]
+      _ =
+    (0 :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ v.toList) ++ List.zeros n
+      := by
+          have : (m + (offset_comp (m + 1) p_g p_f - (m + 1)) + 2) = offset_comp (m + 1) p_g p_f + 1 := by
+            rewrite [Nat.add_comm m, Nat.add_assoc]
+            have : m + 2 = m + 1 + 1 := rfl
+            rw [this, ←Nat.add_assoc, h]
+          have h := lemma_store (offset_comp (m + 1) p_g p_f - (m + 1)) m
+            ⟨List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)), by simp⟩
+            v
+          dsimp at h
+          rewrite [this, ←List.cons_append, ←List.cons_append] at h
+          rewrite [h]
+          simp
+      _ =
+    0 :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ v.toList ++ List.zeros n
+      := by simp
+
 
 def compute_store_g_i (p_g : Fin n → Program) (offset_store : Nat) (i : Fin n) : Program :=
   p_g i ++ (X (offset_store + 1 + i) += X 0) ++ CLEAR X 0
@@ -707,7 +756,7 @@ def compute_store_g_i (p_g : Fin n → Program) (offset_store : Nat) (i : Fin n)
 def compute_store_all_succ_n_g (n m : Nat) (p_g : Fin (n + 1) → Program) (p_f : Program) (offset_store : Nat) : Program :=
   match n with
   | 0 => compute_store_g_i p_g offset_store 0
-  | n + 1 => compute_store_g_i p_g offset_store 0 ++ compute_store_all_succ_n_g n m (fun i => p_g i.succ) p_f offset_store
+  | n + 1 => compute_store_g_i p_g offset_store 0 ++ compute_store_all_succ_n_g n m (fun i => p_g i.succ) p_f (offset_store + 1)
 
 def execution_from_state_comp_compute_store_succ_n_g (m : Nat) (g : Fin (n + 1) → VectNat m → Nat) (p_g : Fin (n + 1) → Program)
     (p_f : Program) (v : VectNat m) :
@@ -720,13 +769,29 @@ def execution_from_state_comp_clear_succ_m_inputs (m : Nat) (p_g : Fin n → Pro
     execution_from_state (0 :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ v.toList ++ xs)
       (clear_X_j_to_X_n_plus_j 1 m)
         = 0 :: List.zeros (offset_comp (m + 1) p_g p_f) ++ v.toList ++ xs := by
-  sorry
+  repeat rewrite [List.cons_append]
+  rewrite [clear_X_succ]
+  repeat rewrite [List.append_assoc]
+  have : m ≥ highest_var (clear_X_j_to_X_n_plus_j 0 m) := by
+    rewrite [highest_var_clear]
+    simp_arith
+  rewrite [execution_from_state_gt_highest_append v this]
+  rewrite [clear_X_lemma]
+  repeat rewrite [←List.append_assoc]
+  have : (m + 1) + (offset_comp (m + 1) p_g p_f - (m + 1)) = offset_comp (m + 1) p_g p_f := by
+    rw [Nat.add_comm]
+    suffices h : offset_comp (m + 1) p_g p_f ≥ m + 1 from Nat.sub_add_cancel h
+    simp_arith [offset_comp]
+  rw [append_zeros_addition (m + 1) (offset_comp (m + 1) p_g p_f - (m + 1)) (offset_comp (m + 1) p_g p_f) this]
 
 def execution_from_state_comp_setup_succ_n_inputs (m : Nat) (g : Fin (n + 1) → VectNat m → Nat) (p_g : Fin (n + 1) → Program)
     (p_f : Program) (v : VectNat m) :
     execution_from_state (0 :: List.zeros (offset_comp m p_g p_f) ++ v.toList ++ (Vector.ofFn (fun i => g i v)).toList)
     (setup_X_j_to_X_n_plus_j (offset_comp m p_g p_f + m) 1 n)
       = 0 :: (Vector.ofFn (fun i => g i v)).toList ++ List.zeros (offset_comp m p_g p_f - (n + 1)) ++ v.toList ++ (Vector.ofFn (fun i => g i v)).toList := by
+  generalize Vector.ofFn (fun i => g i v) = w
+
+
   sorry
 
 def execution_from_state_comp_clear_succ_n_z (m : Nat) (g : Fin (n + 1) → VectNat m → Nat) (p_g : Fin (n + 1) → Program)
@@ -734,12 +799,23 @@ def execution_from_state_comp_clear_succ_n_z (m : Nat) (g : Fin (n + 1) → Vect
     execution_from_state (0 :: (Vector.ofFn (fun i => g i v)).toList ++ List.zeros (offset_comp m p_g p_f - (n + 1)) ++ v.toList ++ (Vector.ofFn (fun i => g i v)).toList)
     (clear_Z_0_to_Z_n (offset_comp m p_g p_f + m + 1) n)
       = 0 :: (Vector.ofFn (fun i => g i v)).toList ++ List.zeros (offset_comp m p_g p_f - (n + 1)) ++ v.toList ++ List.zeros (n + 1) := by
-  sorry
+  generalize Vector.ofFn (fun i => g i v) = w
+  have : (0 :: w.toList ++ List.zeros (offset_comp m p_g p_f - (n + 1)) ++ Vector.toList v).length
+      = offset_comp m p_g p_f + m + 1 := by
+    simp
+    rewrite [Nat.add_comm _ m, Nat.add_comm, Nat.add_assoc, Nat.add_comm _ m]
+    simp_arith
+    rewrite [Nat.add_assoc]
+    have : offset_comp m p_g p_f ≥ n + 1 := by simp_arith [offset_comp]
+    exact Nat.sub_add_cancel this
+  rw [clear_Z_lemma w this]
 
 def execution_from_state_comp_execute_p_f (g : Fin (n + 1) → VectNat m → Nat) (p_g : Fin (n + 1) → Program)
     (f_h : cleanly_computes p_f f) :
     execution_from_state (0 :: (Vector.ofFn (fun i => g i v)).toList ++ List.zeros (offset_comp m p_g p_f - n) ++ v.toList ++ List.zeros n)
       p_f =  f (Vector.ofFn (fun i => g i v)) :: (Vector.ofFn (fun i => g i v)).toList ++ List.zeros (offset_comp m p_g p_f - n) ++ v.toList ++ List.zeros n := by
+  generalize Vector.ofFn (fun i => g i v) = w
+
   sorry
 
 def execution_from_state_comp_clear_succ_n_inputs (m : Nat) (g : Fin (n + 1) → VectNat m → Nat) (p_g : Fin (n + 1) → Program)
@@ -747,21 +823,149 @@ def execution_from_state_comp_clear_succ_n_inputs (m : Nat) (g : Fin (n + 1) →
     execution_from_state (x :: (Vector.ofFn (fun i => g i v)).toList ++ List.zeros (offset_comp m p_g p_f - (n + 1)) ++ v.toList ++ List.zeros (n + 1))
     (clear_X_j_to_X_n_plus_j 1 n)
       = x :: List.zeros (offset_comp m p_g p_f) ++ v.toList ++ List.zeros (n + 1) := by
-  sorry
+  generalize Vector.ofFn (fun i => g i v) = w
+  repeat rewrite [List.append_assoc]
+  repeat rewrite [List.cons_append]
+  rewrite [clear_X_succ]
+  have : n ≥ highest_var (clear_X_j_to_X_n_plus_j 0 n) := by simp_arith [highest_var_clear]
+  rewrite [execution_from_state_gt_highest_append w this]
+  rewrite [clear_X_lemma]
+  repeat rewrite [←List.append_assoc]
+  simp
+  rewrite [Nat.add_comm]
+  have : (n + 1) ≤  offset_comp m p_g p_f := by simp_arith [offset_comp]
+  exact Nat.sub_add_cancel this
 
 def execution_from_state_comp_setup_succ_m_inputs (m : Nat) (p_g : Fin n → Program) (p_f : Program) (v : VectNat (m + 1)) :
     execution_from_state (x :: List.zeros (offset_comp (m + 1) p_g p_f) ++ v.toList ++ List.zeros n)
     (setup_X_j_to_X_n_plus_j (offset_comp (m + 1) p_g p_f) 1 m)
       = x :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ v.toList ++ List.zeros n := by
-  sorry
+  exact calc
+    execution_from_state (x :: List.zeros (offset_comp (m + 1) p_g p_f) ++ v.toList ++ List.zeros n)
+      (setup_X_j_to_X_n_plus_j (offset_comp (m + 1) p_g p_f) 1 m)
+      =
+    execution_from_state ((x :: List.zeros (offset_comp (m + 1) p_g p_f) ++ v.toList) ++ List.zeros n)
+      (setup_X_j_to_X_n_plus_j (offset_comp (m + 1) p_g p_f) 1 m)
+        := by simp
+    _ =
+    execution_from_state (x :: List.zeros (offset_comp (m + 1) p_g p_f) ++ v.toList)
+      (setup_X_j_to_X_n_plus_j (offset_comp (m + 1) p_g p_f) 1 m) ++ List.zeros n
+        := by
+            have h : (x :: List.zeros (offset_comp (m + 1) p_g p_f) ++ v.toList).length
+              = offset_comp (m + 1) p_g p_f + (m + 1) + 1 := by simp_arith
+            have : offset_comp (m + 1) p_g p_f + (m + 1)
+              ≥ highest_var (setup_X_j_to_X_n_plus_j (offset_comp (m + 1) p_g p_f) 1 m) := by
+                rewrite [highest_var_setup]
+                suffices h : m + 1 ≤ offset_comp (m + 1) p_g p_f + m + 1 from by
+                  rw [Nat.max_eq_right h, Nat.add_assoc]
+                simp_arith
+            have := @execution_from_state_gt_highest_append (setup_X_j_to_X_n_plus_j (offset_comp (m + 1) p_g p_f) 1 m)
+              (List.zeros n) _
+              ⟨x :: List.zeros (offset_comp (m + 1) p_g p_f) ++ v.toList, h⟩ this
+            dsimp at this
+            rewrite [←List.cons_append, ←List.cons_append] at this
+            rw [this]
+    _ =
+    execution_from_state (x :: (List.zeros (offset_comp (m + 1) p_g p_f) ++ v.toList))
+      (setup_X_j_to_X_n_plus_j (offset_comp (m + 1) p_g p_f) 1 m) ++ List.zeros n
+        := by rw [List.cons_append]
+    _ =
+      x :: execution_from_state (List.zeros (offset_comp (m + 1) p_g p_f) ++ v.toList)
+      (setup_X_j_to_X_n_plus_j (offset_comp (m + 1) p_g p_f - 1) 0 m) ++ List.zeros n
+        := by
+            have : offset_comp (m + 1) p_g p_f = offset_comp (m + 1) p_g p_f - 1 + 1 := by
+              suffices h : offset_comp (m + 1) p_g p_f ≥ 1 from (Nat.sub_add_cancel h).symm
+              simp_arith [offset_comp]
+            have : setup_X_j_to_X_n_plus_j (offset_comp (m + 1) p_g p_f) 1 m
+              = setup_X_j_to_X_n_plus_j (offset_comp (m + 1) p_g p_f - 1 + 1) 1 m := by rewrite [this]; simp_arith
+            rewrite [this]
+            rw [setup_X_succ]
+    _ =
+      x :: execution_from_state (List.zeros (m + 1) ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ v.toList)
+      (setup_X_j_to_X_n_plus_j (offset_comp (m + 1) p_g p_f - 1) 0 m) ++ List.zeros n
+        := by
+            have : (m + 1) + (offset_comp (m + 1) p_g p_f - (m + 1)) = offset_comp (m + 1) p_g p_f := by
+              rw [Nat.add_comm]
+              suffices h : offset_comp (m + 1) p_g p_f ≥ m + 1 from Nat.sub_add_cancel h
+              simp_arith [offset_comp]
+            rw [←append_zeros_addition (m + 1) (offset_comp (m + 1) p_g p_f - (m + 1))
+              (offset_comp (m + 1) p_g p_f) this]
+    _ =
+      x :: (v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ v.toList)
+       ++ List.zeros n
+        := by
+            have h := lemma_setup (offset_comp (m + 1) p_g p_f - (m + 1)) m
+              ⟨List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)), by simp⟩
+              v
+            dsimp at h
+            have : m + (offset_comp (m + 1) p_g p_f - (m + 1)) = offset_comp (m + 1) p_g p_f - 1 := by
+              rewrite [Nat.add_comm m]
+              have h : ∀ a : Nat, offset_comp (m + 1) p_g p_f - (m + 1) + a
+                  = offset_comp (m + 1) p_g p_f - (m + 1) + (a + 1) - 1 := by
+                intro a
+                simp_arith
+              rewrite [h m]
+              suffices h : (m + 1) ≤ offset_comp (m + 1) p_g p_f from congrArg (· - 1) (Nat.sub_add_cancel h)
+              simp_arith [offset_comp]
+            rewrite [this] at h
+            rw [h]
 
-def execution_from_state_comp_clear_succ_m_z (m : Nat) (p_g : Fin (n + 1) → Program) (p_f : Program) (v : VectNat m) :
-    execution_from_state (x :: v.toList ++ List.zeros (offset_comp m p_g p_f - m) ++ v.toList ++ List.zeros (n + 1))
-    (clear_Z_0_to_Z_n (offset_comp m p_g p_f + 1) m)
-      = x :: v.toList ++ List.zeros (offset_comp m p_g p_f - m) ++ List.zeros ((n + 1) + m) := by
-  sorry
+    _ =
+    x :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ v.toList ++ List.zeros n
+        := by simp
+
+def execution_from_state_comp_clear_succ_m_z (m : Nat) (p_g : Fin n → Program) (p_f : Program) (v : VectNat (m + 1)) :
+    execution_from_state (x :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ v.toList ++ List.zeros n)
+    (clear_Z_0_to_Z_n (offset_comp (m + 1) p_g p_f + 1) m)
+      = x :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ List.zeros ((m + 1) + n) := by
+  calc
+    execution_from_state (x :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ v.toList ++ List.zeros n)
+      (clear_Z_0_to_Z_n (offset_comp (m + 1) p_g p_f + 1) m)
+      =
+    execution_from_state ((x :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ v.toList) ++ List.zeros n)
+      (clear_Z_0_to_Z_n (offset_comp (m + 1) p_g p_f + 1) m)
+        := by simp
+    _ =
+    execution_from_state (x :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ v.toList)
+      (clear_Z_0_to_Z_n (offset_comp (m + 1) p_g p_f + 1) m) ++ List.zeros n
+        := by
+          have h : (x :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ v.toList).length
+              = offset_comp (m + 1) p_g p_f + (m + 1) + 1 := by
+            simp
+            rewrite [Nat.add_comm]
+            simp_arith
+            suffices h : m + 1 ≤ offset_comp (m + 1) p_g p_f from (Nat.sub_add_cancel h)
+            simp_arith [offset_comp]
+          have : offset_comp (m + 1) p_g p_f + (m + 1)
+              ≥ highest_var (clear_Z_0_to_Z_n (offset_comp (m + 1) p_g p_f + 1) m) := by
+            rewrite [highest_var_clear_Z]
+            rw [Nat.add_assoc, Nat.add_comm 1 m]
+          have := @execution_from_state_gt_highest_append (clear_Z_0_to_Z_n (offset_comp (m + 1) p_g p_f + 1) m)
+            (List.zeros n) (offset_comp (m + 1) p_g p_f + (m + 1))
+            ⟨x :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ v.toList, h⟩
+            this
+          dsimp at this
+          repeat rewrite [←List.cons_append] at this
+          rw [this]
+    _ = x :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)) ++ List.zeros ((m + 1) + n)
+        := by
+            have : (x :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1))).length
+                = offset_comp (m + 1) p_g p_f + 1 := by
+              simp
+              rewrite [Nat.add_comm]
+              suffices h : m + 1 ≤ offset_comp (m + 1) p_g p_f from (Nat.sub_add_cancel h)
+              simp_arith [offset_comp]
+            have := @clear_Z_lemma m (offset_comp (m + 1) p_g p_f + 1)
+              (x :: v.toList ++ List.zeros (offset_comp (m + 1) p_g p_f - (m + 1)))
+              v this
+            rewrite [this]
+            repeat rewrite [List.append_assoc]
+            rewrite [append_zeros_addition (m + 1) n ((m + 1) + n) rfl]
+            repeat rw [←List.append_assoc]
+
 
 -- TODO: check if m = 0 is needed
+-- TODO: check if correct
 -- This was hard
 def comp_program (g : Fin n → VectNat m → Nat) (_ : cleanly_computes p_f f) (p_g : Fin n → Program)
     (_ : ∀ i, cleanly_computes (p_g i) (g i)) : Program := match n with
@@ -792,6 +996,173 @@ def comp_program (g : Fin n → VectNat m → Nat) (_ : cleanly_computes p_f f) 
       ++ clear_Z_0_to_Z_n (offset_comp m p_g p_f + 1) m
 
 
+def highest_var_compute_store_all_succ_n_g_lemma (n m k : Nat) (p_g : Fin (n + 1) → Program) (p_f : Program)
+    : ∀ x : Nat, x ≥ offset_comp m p_g p_f →
+      highest_var (compute_store_all_succ_n_g n m p_g p_f (x + k))
+      = highest_var (compute_store_all_succ_n_g n m p_g p_f x) + k := by
+  revert p_g  k
+  induction n
+  case zero =>
+    intro k p_g x x_h
+    dsimp [compute_store_all_succ_n_g, compute_store_g_i, highest_var]
+    repeat rewrite [Nat.max_zero, Nat.zero_max]
+    have h' : highest_var (p_g 0) ≤ highest_var_p_g p_g := highest_var_p_g_ge_highest_var_p_g_i 0
+    have : highest_var_p_g p_g ≤ offset_comp m p_g p_f := by simp [offset_comp]
+    have := Nat.le_trans h' this
+    have h' := Nat.le_trans this x_h
+    have := @Nat.le_add_right_of_le _ _ 1 h'
+    rewrite [Nat.max_eq_right this]
+    rewrite [Nat.add_assoc]
+    have := @Nat.le_add_right_of_le _ _ (k + 1) h'
+    rewrite [Nat.max_eq_right this]
+    rw [Nat.add_comm k 1, Nat.add_assoc]
+  case succ n n_ih =>
+    intro k p_g x x_h
+    dsimp [compute_store_all_succ_n_g, compute_store_g_i, highest_var]
+    repeat rewrite [Nat.max_zero, Nat.zero_max]
+    have h' : highest_var (p_g 0) ≤ highest_var_p_g p_g := highest_var_p_g_ge_highest_var_p_g_i 0
+    have : highest_var_p_g p_g ≤ offset_comp m p_g p_f := by simp [offset_comp]
+    have := Nat.le_trans h' this
+    have h' := Nat.le_trans this x_h
+    have := @Nat.le_add_right_of_le _ _ 1 h'
+    rewrite [Nat.max_eq_right this]
+    have := @Nat.le_add_right_of_le _ _ (k + 1) h'
+    rewrite [Nat.add_assoc x, Nat.max_eq_right this]
+    rewrite [Nat.add_comm k 1, ←Nat.add_assoc]
+
+    suffices h : highest_var (compute_store_all_succ_n_g n m (fun i ↦ p_g i.succ) p_f (x + 1 + k))
+        = highest_var (compute_store_all_succ_n_g n m (fun i ↦ p_g i.succ) p_f (x + 1)) + k from by
+      rewrite [h]
+      generalize highest_var (compute_store_all_succ_n_g n m (fun i ↦ p_g i.succ) p_f (x + 1)) = t
+      apply Nat.add_max_add_right
+    rewrite [Nat.add_assoc]
+    have : offset_comp m p_g p_f ≥ offset_comp m (fun i => p_g i.succ) p_f := by
+      dsimp [offset_comp]
+      have h_1 : max (n + 1 + 1) m ≥ max (n + 1) m :=
+        max_le_lemma (n + 1) m (n + 1 + 1) m (Nat.le_succ (n + 1)) (Nat.le_refl m)
+      have h_2 : highest_var_p_g p_g ≥ highest_var_p_g fun i ↦ p_g i.succ := by
+        have : highest_var_p_g p_g = max (highest_var (p_g 0)) (highest_var_p_g (fun i => p_g i.succ)) := rfl
+        rewrite [this]
+        simp
+      have h_3 : max (highest_var p_f) (highest_var_p_g p_g)
+          ≥ max (highest_var p_f) (highest_var_p_g fun i ↦ p_g i.succ) :=
+         max_le_lemma (highest_var p_f) (highest_var_p_g fun i ↦ p_g i.succ)
+          (highest_var p_f) (highest_var_p_g p_g) (Nat.le_refl _) h_2
+      exact max_le_lemma _ _ _ _ h_1 h_3
+    have h'' := Nat.le_trans this x_h
+    rewrite [n_ih (1 + k) (fun i => p_g i.succ) x h'']
+    rewrite [←Nat.add_assoc]
+    rw [n_ih 1 (fun i => p_g i.succ) x h'' ]
+
+
+def highest_var_compute_store_all_succ_n_g (n m : Nat) (p_g : Fin (n + 1) → Program) (p_f : Program)
+    : highest_var (compute_store_all_succ_n_g n m p_g p_f (offset_comp m p_g p_f + m))
+      = offset_comp m p_g p_f + m + (n + 1) := by
+  rewrite [highest_var_compute_store_all_succ_n_g_lemma _ m m p_g p_f _
+    (Nat.le_refl (offset_comp m p_g p_f))]
+  suffices h : ∀ x : Nat, x ≥ offset_comp m p_g p_f →
+    highest_var (compute_store_all_succ_n_g n m p_g p_f x)
+     = x + (n + 1) from by
+      rewrite [h (offset_comp m p_g p_f) (Nat.le_refl (offset_comp m p_g p_f))]
+      simp_arith
+  revert p_g
+  induction n
+  case zero =>
+    intro p_g x x_h
+    dsimp [compute_store_all_succ_n_g, compute_store_g_i, highest_var]
+    rewrite [Nat.zero_max, Nat.max_zero]
+    have : highest_var_p_g p_g ≤ offset_comp m p_g p_f := by simp_arith [offset_comp]
+    have := Nat.le_trans this x_h
+    have := Nat.le_trans (@highest_var_p_g_ge_highest_var_p_g_i 1 p_g 0) this
+    have := @Nat.le_add_right_of_le _ _ 1 this
+    exact Nat.max_eq_right this
+  case succ n n_ih =>
+    intro p_g x x_h
+    dsimp [compute_store_all_succ_n_g, highest_var]
+    rewrite [Nat.zero_max, Nat.max_zero]
+    have : highest_var_p_g p_g ≤ offset_comp m p_g p_f := by simp_arith [offset_comp]
+    have := Nat.le_trans this x_h
+    have := Nat.le_trans (@highest_var_p_g_ge_highest_var_p_g_i _ p_g 0) this
+    have := @Nat.le_add_right_of_le _ _ 1 this
+    rewrite [Nat.max_eq_right this]
+    have : offset_comp m (fun i ↦ p_g i.succ) p_f ≤ x  := by sorry
+    have := n_ih (fun i => p_g i.succ) (x + 1) (Nat.le_trans this (Nat.le_succ x))
+    rewrite [this]
+    simp_arith
+
+def highest_var_comp_program (g : Fin n → VectNat m → Nat) (f_h : cleanly_computes p_f f) (p_g : Fin n → Program)
+    (g_h : ∀ i, cleanly_computes (p_g i) (g i)) :
+      highest_var (comp_program g f_h p_g g_h) = offset_comp m p_g p_f + m + n := by
+  cases n
+  case zero =>
+    cases m
+    case zero =>
+      dsimp [comp_program, offset_comp]
+      rw [highest_var_p_g, Nat.max_zero, Nat.zero_max, Nat.max_zero]
+    case succ m =>
+      dsimp [comp_program, highest_var]
+      rewrite [highest_var_store, highest_var_clear, highest_var_setup,
+        highest_var_clear_Z]
+      have : max (m + 1) (offset_comp (m + 1) p_g p_f + 1 + m)
+          = offset_comp (m + 1) p_g p_f + 1 + m := by
+        have : m + 1 ≤ offset_comp (m + 1) p_g p_f := by simp [offset_comp]
+        have := @Nat.le_add_right_of_le _ _ (1 + m) this
+        rewrite [←Nat.add_assoc] at this
+        exact Nat.max_eq_right this
+      rewrite [Nat.max_comm _ (m + 1)]
+      rewrite [this, this]
+      conv =>
+        lhs
+        pattern _ + m + 1
+        rewrite [Nat.add_assoc]
+        congr
+        rfl
+        rewrite [Nat.add_comm]
+        rfl
+      rewrite [←Nat.add_assoc]
+      rewrite [this]
+      have : max (offset_comp (m + 1) p_g p_f + 1 + m) (highest_var p_f)
+          = offset_comp (m + 1) p_g p_f + 1 + m := by
+        have : highest_var p_f ≤ offset_comp (m + 1) p_g p_f := by simp [offset_comp]
+        have := @Nat.le_add_right_of_le _ _ (1 + m) this
+        rewrite [←Nat.add_assoc] at this
+        exact Nat.max_eq_left this
+
+      rewrite [this]
+      rewrite [Nat.max_self]
+      have : max (offset_comp (m + 1) p_g p_f + 1 + m) (offset_comp m p_g p_f + 1 + m)
+          = offset_comp (m + 1) p_g p_f + 1 + m := by
+        suffices h : offset_comp (m + 1) p_g p_f ≥ offset_comp m p_g p_f from by
+          have := Nat.add_le_add_right h (1 + m)
+          rewrite [←Nat.add_assoc, ←Nat.add_assoc] at this
+          exact Nat.max_eq_left this
+        dsimp [offset_comp]
+        rewrite [Nat.zero_max, Nat.zero_max]
+        generalize max (highest_var p_f) (highest_var_p_g p_g) = x
+        simp
+        cases (Nat.decLe m x )
+        case isFalse h =>
+          apply Or.intro_left
+          have := Nat.gt_of_not_le h
+          have : x + 1 ≤ m := this
+          have := @Nat.le_add_right_of_le _ _ 2 this
+          exact Nat.le_of_succ_le_succ this
+        case isTrue h =>
+          apply Or.intro_right
+          assumption
+
+      rewrite [this]
+      rw [Nat.add_comm m, Nat.add_assoc]
+  case succ n =>
+    cases m
+    case zero =>
+      dsimp [comp_program, highest_var]
+      rewrite [highest_var_setup, highest_var_clear, highest_var_clear_Z]
+
+      sorry
+    case succ m =>
+      sorry
+
 -- 1. def execution_from_state_comp_store_succ_m_inputs
 -- 2. def execution_from_state_comp_compute_store_succ_n_g
 -- 3. def execution_from_state_comp_clear_succ_m_inputs
@@ -809,7 +1180,7 @@ def comp_program (g : Fin n → VectNat m → Nat) (_ : cleanly_computes p_f f) 
 --   intro ⟨p_f, f_h⟩ g_h
 --   have ⟨p_g, g_h⟩ := forall_exists_function g g_h
 
-  -- sorry
+--   sorry
 
 end comp_is_loop_computable_cleanly_proof
 

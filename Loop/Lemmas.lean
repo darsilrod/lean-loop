@@ -921,3 +921,9 @@ theorem forall_exists_function {n : Nat} (g : Fin n → VectNat m → Nat)
       suffices h : ⟨n, Nat.lt_succ_self n⟩ = i from by rewrite [h] at p_g_n_h; assumption
       suffices h : n = i.val from Fin.eq_of_val_eq h
       exact Nat.le_antisymm (Nat.ge_of_not_lt h) (Nat.le_of_lt_succ i.2)
+
+-- Note: attempting to use the simplifier does not work. Why?
+theorem max_le_lemma (a b c d : Nat) (h_1 : a ≤ c) (h_2 : b ≤ d) : max a b ≤ max c d := by
+  have h_3 := Nat.le_trans h_1 (Nat.le_max_left c d)
+  have h_4 := Nat.le_trans h_2 (Nat.le_max_right c d)
+  exact Nat.max_le.mpr (And.intro h_3 h_4)
