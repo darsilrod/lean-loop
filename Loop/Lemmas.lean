@@ -11,6 +11,8 @@ import Loop.Defs
 namespace Loop
 open Program
 
+theorem init_state_eq : init_state v = 0 :: v.toList := rfl
+
 theorem value_at_nil : value_at [] n = 0 := rfl
 theorem value_at_cons_zero : value_at (x :: xs) 0 = x := rfl
 theorem value_at_cons_succ : value_at (x :: xs) (n + 1) = value_at xs n := rfl
