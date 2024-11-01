@@ -1439,37 +1439,290 @@ theorem primrec_is_loop_computable {f : VectNat n → Nat} :
 --
 
 -- m = max n (highest_var p)
-abbrev encode {n : Nat} : VectNat n → Nat := @Encodable.encode (VectNat n) _
-abbrev decode (n : Nat) : Nat → Option (VectNat n) := @Encodable.decode (VectNat n) _
+
+-- TODO: move stuff to Defs and Lemmas
+def encodeVect (n : Nat) : VectNat (n + 1) → Nat := match n with
+  | 0 => Vector.head
+  | n + 1 => fun v => Nat.pair v.head (encodeVect n v.tail)
+
+def decodeVect (n i : Nat) : VectNat 1 → Nat := match n with
+  | 0 => match i with
+    | 0 => Vector.head
+    | _ + 1 => fun _ => 0
+  | n + 1 => match i with
+    | 0 => fun z => z.head.unpair.1
+    | i + 1 => fun z => decodeVect n i ⟨[z.head.unpair.2], rfl⟩
+
+theorem decode_primrec' : ∀ n i : Nat, Nat.Primrec' (decodeVect n i) := by
+  intro n
+  induction n
+  case zero =>
+    intro i
+    cases i
+    · exact Nat.Primrec'.head
+    · exact Nat.Primrec'.const 0
+  case succ n n_ih =>
+    intro i
+    cases i
+    case zero =>
+      dsimp [decodeVect]
+      exact Nat.Primrec'.comp₁ (fun z => z.unpair.1)
+        (Nat.Primrec'.unpair₁ Nat.Primrec'.head) Nat.Primrec'.head
+    case succ i =>
+      dsimp [decodeVect]
+      let f : VectNat 1 → Nat := fun z => decodeVect n i ⟨[z.head], rfl⟩
+      have : f = decodeVect n i := by
+        have : ∀ z : VectNat 1, ⟨[z.head], rfl⟩ = z := by
+          intro v
+          let ⟨[x], _⟩ := v
+          dsimp [Vector.head]
+        conv =>
+          lhs
+          dsimp [f]
+          intro z
+          rw [this z]
+      have : Nat.Primrec' f := by rewrite [this]; exact n_ih i
+      exact @Nat.Primrec'.comp₁ (fun z => decodeVect n i ⟨[z], rfl⟩) this
+        1 (fun z => (Nat.unpair z.head).2) (Nat.Primrec'.unpair₂ Nat.Primrec'.head)
+
+theorem decodeVect_encode (n i : Nat) (v : VectNat (n + 1)) :
+    decodeVect n i ⟨[encodeVect n v], rfl⟩
+     = if h : i < n + 1 then v.get ⟨i, h⟩ else 0 := by
+  revert i
+  induction n
+  case zero =>
+    intro i
+    cases i
+    case zero =>
+      let ⟨[x], _⟩ := v
+      dsimp [encodeVect, decodeVect, Vector.head, Vector.get]
+    case succ i =>
+      dsimp [decodeVect]
+  case succ n n_ih =>
+    intro i
+    let ⟨x :: xs, xs_l⟩ := v
+    cases i
+    case zero =>
+      dsimp [decodeVect, encodeVect, Vector.head, Vector.get]
+      rw [Nat.unpair_pair, Prod.fst]
+    case succ i =>
+      dsimp [decodeVect, encodeVect, Vector.head, Vector.tail]
+      rewrite [Nat.unpair_pair]
+      simp at xs_l
+      rewrite [n_ih ⟨xs, xs_l⟩ i]
+      cases (Nat.decLt i (n + 1))
+      case isTrue h =>
+        simp [h]
+        have : (⟨x :: xs, by simp [xs_l]⟩ : VectNat (n + 1 + 1)) = x ::ᵥ ⟨xs, xs_l⟩ := by
+          dsimp [Vector.cons]
+        rewrite [this]
+        have : (⟨i + 1, by simp [h]⟩ : Fin (n + 1 +1)) = (⟨i, h⟩ : Fin (n + 1)).succ := by simp
+        rewrite [this]
+        rw [Vector.get_cons_succ]
+      case isFalse h =>
+        simp [h]
+
+theorem decodeVect_append_encode (n m i : Nat) (v : VectNat (n + 1))
+    (w : VectNat m) (h : i < n + 1) :
+    decodeVect (n + m) i ⟨[encodeVect (n + m) ⟨v.toList.append w.toList, by simp_arith⟩], rfl⟩
+      = v.get ⟨i, h⟩ := by
+  have : i < n + m + 1 := by
+    have : n + 1 ≤ n + m + 1 := by simp_arith
+    exact Nat.le_trans h this
+  rewrite [decodeVect_encode]
+  simp [this]
+  have : ⟨v.toList, v.toList_length⟩ = v := by
+    apply Vector.eq
+    simp
+  rewrite [this.symm]
+  simp [Vector.get]
+  apply List.getElem_append
 
 
--- def to_PR_clear_var (m : Nat) (i : Nat) (h : i ≤ m) : Nat → Nat := sorry
+theorem decodeVect_append_encode' (n m i : Nat) (v : VectNat (n + 1))
+    (w : VectNat m) (h : i < n + 1) :
+    decodeVect (n + m) i ⟨[encodeVect (n + m) ⟨v.toList.append w.toList, by simp_arith⟩], rfl⟩
+      = decodeVect n i ⟨[encodeVect n v], rfl⟩ := by
+  rewrite [decodeVect_append_encode n m i v w h]
+  rewrite [decodeVect_encode]
+  simp [h]
 
--- def to_PR_increment_var (m : Nat) (i : Nat) (h : i ≤ m) : Nat → Nat := match m with
---   | 0 => Nat.succ
---   | m + 1 => by
---     -- have := Primcodable.vector (VectNat n)
---     let v : VectNat 3 := ⟨[3, 1, 23], rfl⟩
---     let l := decode 3 (encode v)
---     have : l = v := by simp [l]
---     let x := decode 0 0
---     have : x = none := by
---       dsimp [x, decode, Encodable.decode, Encodable.decodeSubtype]
---       -- simp [Encodable.decodeList]
+theorem decodeVect_encode_value_at (n i : Nat) (v : VectNat (n + 1)) :
+    decodeVect n i ⟨[encodeVect n v], rfl⟩
+     = value_at v.toList i := by
+  rewrite [decodeVect_encode]
+  induction n
+  case zero =>
+    let ⟨[x], _⟩ := v
+    cases Nat.decLt i 1
+    case isTrue h =>
+      have := Nat.lt_one_iff.mp h
+      simp [this, Vector.head, value_at]
+    case isFalse h =>
+      simp [h]
+      rewrite [←Nat.sub_add_cancel (Nat.ge_of_not_lt h)]
+      simp [Vector.head, value_at]
+  case succ n n_ih =>
+    sorry
 
+theorem encodeVect_decode (n z : Nat) :
+    encodeVect n (Vector.ofFn (fun j => decodeVect n j ⟨[z], rfl⟩)) = z := by
+  revert z
+  induction n
+  case zero =>
+    simp [encodeVect, decodeVect, Vector.head, Vector.ofFn]
+  case succ n n_ih =>
+    intro z
+    simp [encodeVect, decodeVect]
+    dsimp [Vector.head]
+    rewrite [n_ih]
+    exact Nat.pair_unpair z
 
+theorem encodeVect_primrec' : ∀ n : Nat, Nat.Primrec' (encodeVect n) := by
+  intro n
+  induction n
+  case zero =>
+    exact Nat.Primrec'.head
+  case succ n n_ih =>
+    exact Nat.Primrec'.comp₂ Nat.pair Nat.Primrec'.natPair Nat.Primrec'.head
+      (Nat.Primrec'.tail n_ih)
 
---       sorry
+-- -- m = max n (highest_var p)
+def inc_value_i_vect (m i : Nat) : Fin (m + 1) → VectNat 1 → Nat :=
+  fun j z => if (i = j) then (decodeVect m i z).succ else decodeVect m j z
 
+def clear_value_i_vect (m i : Nat) : Fin (m + 1) → VectNat 1 → Nat :=
+  fun j z => if (i = j) then 0 else decodeVect m j z
 
---     sorry
+theorem inc_value_i_vect_primrec' (m i : Nat) :
+    ∀ j : Fin (m + 1), Nat.Primrec' (inc_value_i_vect m i j) := by
+  intro j
+  cases Nat.decEq i j
+  case isTrue h =>
+    conv =>
+      congr
+      intro v
+      simp [inc_value_i_vect, h]
+      rfl
+    apply Nat.Primrec'.comp₁ Nat.succ Nat.Primrec'.succ
+    apply decode_primrec'
+  case isFalse h =>
+    conv =>
+      congr
+      intro v
+      simp [inc_value_i_vect, h]
+      rfl
+    apply decode_primrec'
 
--- -- def to_PR_loop_var
--- -- def to_PR_seq_execution
--- -- def to_PR_program
+theorem clear_value_i_vect_primrec' (m i : Nat) :
+    ∀ j : Fin (m + 1), Nat.Primrec' (clear_value_i_vect m i j) := by
+  intro j
+  cases Nat.decEq i j
+  case isTrue h =>
+    conv =>
+      congr
+      intro v
+      simp [clear_value_i_vect, h]
+      rfl
+    apply Nat.Primrec'.const
+  case isFalse h =>
+    conv =>
+      congr
+      intro v
+      simp [clear_value_i_vect, h]
+      rfl
+    apply decode_primrec'
 
--- def to_PR_program (p : Program) (n : Nat) : Nat → Nat := match p with
---   | clear_var i => to_PR_clear_var (max n i) i (Nat.le_max_right n i)
---   | increment_var i => to_PR_increment_var (max n i) i (Nat.le_max_right n i)
---   | loop_var i inner => sorry
---   | seq_execution p p' => (to_PR_program p' n) ∘ (to_PR_program p n)
+def inc_value_i_encode (m i : Nat) : VectNat 1 → Nat :=
+  fun z => encodeVect m (Vector.ofFn fun j => inc_value_i_vect m i j z)
+
+def clear_value_i_encode (m i : Nat) : VectNat 1 → Nat :=
+  fun z => encodeVect m (Vector.ofFn fun j => clear_value_i_vect m i j z)
+
+theorem inc_value_i_encode_primrec' (m i : Nat) :
+    Nat.Primrec' (inc_value_i_encode m i) :=
+  Nat.Primrec'.comp (inc_value_i_vect m i) (encodeVect_primrec' m)
+    (inc_value_i_vect_primrec' m i)
+
+theorem clear_value_i_encode_primrec' (m i : Nat) :
+    Nat.Primrec' (clear_value_i_encode m i) :=
+  Nat.Primrec'.comp (clear_value_i_vect m i) (encodeVect_primrec' m)
+    (clear_value_i_vect_primrec' m i)
+
+def program_execution_fn (p : Program) (n : Nat) : VectNat 1 → Nat := match p with
+  | clear_var i => clear_value_i_encode n i
+  | increment_var i => inc_value_i_encode n i
+  | seq_execution p p' => fun z => program_execution_fn p' n ⟨[program_execution_fn p n z], rfl⟩
+  | loop_var i inner =>
+    let g_inner := fun z : VectNat 2 =>
+      z.head.rec (z.tail.head) fun _ IH => program_execution_fn inner n ⟨[IH], rfl⟩
+    fun z => g_inner ⟨[(decodeVect n i z), z.head], rfl⟩
+
+ -- TODO: construct using program_execution
+-- Question: why is this proof so difficult 1. to formalise and 2. to prove.
+-- At this point I wonder what am I missing.
+theorem decode_program_execution_fn_eq_value_at (p : Program) : ∀ n : Nat, n ≥ highest_var p →
+  ∀ v : VectNat (n + 1), ∀ k : Nat,
+    value_at (execution_from_state v.toList p) k =
+      decodeVect n k ⟨[program_execution_fn p n ⟨[encodeVect n v], rfl⟩], rfl⟩ := by
+  induction p
+  case clear_var i =>
+    intro n _ v k
+    dsimp [program_execution_fn]
+    rewrite [clear_value_i_encode, decodeVect_encode]
+    simp [execution_from_state, clear_value_clears_value, clear_value_i_vect]
+    rewrite [decodeVect_encode_value_at]
+    cases Nat.decLt k (n + 1)
+    case isTrue h =>
+      simp [h]
+    case isFalse h =>
+      dsimp [h]
+      have := Nat.not_lt.mp h
+      sorry
+  case increment_var i =>
+    sorry
+  case loop_var i inner inner_ih =>
+    intro n n_h v k
+    simp [execution_from_state]
+    let g_inner : VectNat 2 → Nat := fun z =>
+      z.head.rec (z.tail.head) fun _ IH => program_execution_fn inner n ⟨[IH], rfl⟩
+    have : program_execution_fn (loop_var i inner) n
+        = fun z => g_inner ⟨[(decodeVect n i z), z.head], rfl⟩ := by simp [g_inner, program_execution_fn]
+    rewrite [this]
+    simp
+    rewrite [decodeVect_encode_value_at]
+    generalize value_at v.toList i = a
+    dsimp [Vector.head]
+    revert k
+    induction a
+    case zero =>
+      intros
+      simp [loop_n_times, g_inner, Vector.head, Vector.tail]
+      rw [decodeVect_encode_value_at]
+    case succ a a_ih =>
+      intro k
+      rewrite [loop_n_times_loop]
+      sorry
+  case seq_execution p p' p_ih p'_ih =>
+
+    intro n n_h v k
+    dsimp [highest_var] at n_h
+    have n_p_h := Nat.le_trans (Nat.le_max_left _ (highest_var p')) n_h
+    have n_p'_h := Nat.le_trans (Nat.le_max_right (highest_var p) _) n_h
+
+    let f_p_h := p_ih n n_p_h
+    let f_p'_h := p'_ih n n_p'_h
+    simp [program_execution_fn, execution_from_state]
+    let xs := execution_from_state (Vector.toList v) p
+    have xs_l := execution_from_state_long_enough_preserves_length p
+      v (Nat.succ_le_succ_iff.mpr n_p_h)
+    have := f_p_h v
+    let w : VectNat (n + 1) :=
+      Vector.ofFn (fun j => decodeVect n j ⟨[program_execution_fn p n ⟨[encodeVect n v], rfl⟩], rfl⟩)
+    have : ∀ k : Nat, value_at (execution_from_state v.toList p) k = value_at w.toList k := by
+      sorry
+    rewrite [same_values_same_execution p' (execution_from_state v.toList p) w.toList this k]
+    rewrite [f_p'_h w k]
+    repeat apply congr_arg; apply Vector.eq; simp [Vector.head]
+    simp [w]
+    rw [encodeVect_decode]
