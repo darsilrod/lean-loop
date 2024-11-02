@@ -1419,7 +1419,7 @@ theorem comp_is_loop_computable_cleanly (g : Fin n → VectNat m → Nat) :
 end comp_is_loop_computable_cleanly_proof
 
 
-theorem primrec_is_loop_computable_cleanly : Nat.Primrec' f → loop_computable_cleanly f := by
+theorem primrec'_is_loop_computable_cleanly : Nat.Primrec' f → loop_computable_cleanly f := by
   intro h
   induction h
   case zero => exact zero_is_loop_computable_cleanly
@@ -1428,19 +1428,15 @@ theorem primrec_is_loop_computable_cleanly : Nat.Primrec' f → loop_computable_
   case comp g _ _ f_ih g_ih => exact comp_is_loop_computable_cleanly g f_ih g_ih
   case prec f_ih g_ih => exact prec_is_loop_computable_cleanly f_ih g_ih
 
-theorem primrec_is_loop_computable {f : VectNat n → Nat} :
-    Primrec f → loop_computable f := by
+theorem primrec'_is_loop_computable {f : VectNat n → Nat} :
+    Nat.Primrec' f → loop_computable f := by
   intro h
-  have := Nat.Primrec'.of_prim h
-  have := primrec_is_loop_computable_cleanly this
+  have := primrec'_is_loop_computable_cleanly h
   have := loop_computable_cleanly_is_loop_computable this
   assumption
 
 --
 
--- m = max n (highest_var p)
-
--- -- m = max n (highest_var p)
 def inc_value_i_vect (m i : Nat) : Fin (m + 1) → VectNat 1 → Nat :=
   fun j z => if (i = j) then (decode_VectNat m i z).succ else decode_VectNat m j z
 
@@ -1554,9 +1550,6 @@ theorem program_execution_fn_primrec' (p : Program) (n : Nat) :
     exact Nat.Primrec'.comp₁ (fun z => program_execution_fn p' n ⟨[z], rfl⟩)
       this p_ih
 
- -- TODO: construct using program_execution
--- Question: why is this proof so difficult 1. to formalise and 2. to prove.
--- At this point I wonder what am I missing.
 theorem decode_program_execution_fn_eq_value_at (p : Program) : ∀ n : Nat, n ≥ highest_var p →
   ∀ v : VectNat (n + 1), ∀ k : Nat,
     value_at (execution_from_state v.toList p) k =
@@ -1644,69 +1637,95 @@ theorem decode_program_execution_fn_eq_value_at (p : Program) : ∀ n : Nat, n �
     simp [w]
     rw [encode_VectNat_decode]
 
-def vector_append_zeros (n k : Nat) : VectNat n → VectNat (n + k) :=
-  fun v => v.append ⟨List.zeros k, List.zeros_length ⟩
+def vector_init_state_append_zeros (n k : Nat) : VectNat n → VectNat (n + k + 1) :=
+  fun v => 0 ::ᵥ v.append ⟨List.zeros k, List.zeros_length⟩
 
 def program_execution_fn_encode_decode (p : Program) (n k : Nat) :
   VectNat n → Nat := fun v =>
-    let z := encode_VectNat (n + k) (0 ::ᵥ vector_append_zeros n k v)
+    let z := encode_VectNat (n + k) (vector_init_state_append_zeros n k v)
     let z' := program_execution_fn p (n + k) ⟨[z], rfl⟩
     decode_VectNat (n + k) 0 ⟨[z'], rfl⟩
 
-theorem vector_append_zeros_primrec' (n k : Nat) : Nat.Primrec'.Vec (vector_append_zeros n k) := by
+theorem vector_append_zeros_primrec' (n k : Nat) : Nat.Primrec'.Vec (vector_init_state_append_zeros n k) := by
   intro i
-  dsimp [vector_append_zeros]
-  cases Nat.decLt i n
+  dsimp [vector_init_state_append_zeros]
+  cases Fin.decLe i 0
   case isTrue h =>
-    conv =>
-      congr
-      intro v
-      simp [Vector.get_eq_get]
-      rewrite [List.getElem_append i (v.toList_length.symm.subst h)]
-    have := @Nat.Primrec'.get n ⟨i, h⟩
-    conv at this =>
-      congr
-      intro v
-      simp [Vector.get_eq_get]
-    assumption
+    rewrite [Fin.le_zero_iff.mp h]
+    simp
+    exact Nat.Primrec'.const 0
   case isFalse h =>
-    cases k
-    case zero =>
-      have : i.val < n := i.isLt
-      contradiction
-    case succ k =>
-      have h'' : i.val - n < (List.zeros (k + 1)).length := by
-        rewrite [List.zeros_length]
-        have := i.isLt
-        conv at this =>
-          rhs
-          rw [Nat.add_comm]
-        have := @Nat.sub_lt_sub_right i (k + 1 + n) n (Nat.not_lt.mp h) this
-        rewrite [Nat.add_sub_cancel] at this
-        exact this
-      have : ∀ v : VectNat n, (v.toList ++ List.zeros (k + 1))[i.val] = 0 := by
-        intro v
-        have := @List.getElem_append_right Nat i v.toList (List.zeros (k + 1))
-          (v.toList_length.substr h) (by simp) (v.toList_length.substr h'')
-        rewrite [this]
-        simp
+    have : ¬i = 0 := h ∘ Fin.le_zero_iff.mpr
+    let ⟨j, j_h⟩ := Fin.eq_succ_of_ne_zero this
+    rewrite [j_h]
+    simp
+    cases Nat.decLt j n
+    case isTrue h =>
       conv =>
         congr
         intro v
         simp [Vector.get_eq_get]
-        rewrite [this v]
-      exact Nat.Primrec'.const 0
+        rewrite [List.getElem_append j (v.toList_length.symm.subst h)]
+      have := @Nat.Primrec'.get n ⟨j, h⟩
+      conv at this =>
+        congr
+        intro v
+        simp [Vector.get_eq_get]
+      assumption
+    case isFalse h =>
+      cases k
+      case zero =>
+        have : j.val < n := j.isLt
+        contradiction
+      case succ k _ =>
+        have h'' : j.val - n < (List.zeros (k + 1)).length := by
+          rewrite [List.zeros_length]
+          have := j.isLt
+          conv at this =>
+            rhs
+            rw [Nat.add_comm]
+          have := @Nat.sub_lt_sub_right j (k + 1 + n) n (Nat.not_lt.mp h) this
+          rewrite [Nat.add_sub_cancel] at this
+          exact this
+        have : ∀ v : VectNat n, (v.toList ++ List.zeros (k + 1))[j.val] = 0 := by
+          intro v
+          have := @List.getElem_append_right Nat j v.toList (List.zeros (k + 1))
+            (v.toList_length.substr h) (by simp) (v.toList_length.substr h'')
+          rewrite [this]
+          simp
+        conv =>
+          congr
+          intro v
+          simp [Vector.get_eq_get]
+          rewrite [this v]
+        exact Nat.Primrec'.const 0
 
 theorem program_execution_fn_encode_decode_primrec' (p : Program) (n k : Nat) :
     Nat.Primrec' (program_execution_fn_encode_decode p n k) := by
-  sorry
+  let f₁ := encode_VectNat (n + k) ∘ vector_init_state_append_zeros n k
+  let f₂ := program_execution_fn p (n + k)
+  let f₃ :=  fun v => f₂ ⟨[f₁ v], rfl⟩
+  let f₄ : VectNat n → Nat := fun v => decode_VectNat (n + k) 0 ⟨[f₃ v], rfl⟩
+  have : program_execution_fn_encode_decode p n k = f₄ := by
+    apply funext
+    intro v
+    simp [program_execution_fn_encode_decode, f₄, f₃, f₂, f₁]
+  apply this.symm.subst
+  have := Nat.Primrec'.comp'
+    (encode_VectNat_primrec' (n + k)) (vector_append_zeros_primrec' n k)
+  have f₁_primrec' : Nat.Primrec' f₁ := this
+  have f₂_primrec' : Nat.Primrec' f₂ := by dsimp [f₂]; apply program_execution_fn_primrec'
+  have f₃_primrec' : Nat.Primrec' f₃ := Nat.Primrec'.comp
+    (fun _ => f₁) f₂_primrec' (fun _ => f₁_primrec')
+  exact Nat.Primrec'.comp (fun _ => f₃)
+    (decode_primrec' (n + k) 0) (fun _ => f₃_primrec')
 
 theorem nary_program_function_primrec' (p : Program) (n : Nat) :
     Nat.Primrec' ⟦ p ⟧^(n) := by
   have : ⟦ p ⟧^(n) = program_execution_fn_encode_decode p n (highest_var p - n) := by
     apply funext
     intro v
-    simp [program_execution_fn_encode_decode, vector_append_zeros]
+    simp [program_execution_fn_encode_decode, vector_init_state_append_zeros]
     have : n + (highest_var p - n) ≥ highest_var p := by
       cases Nat.decLe (highest_var p) n
       case isTrue h =>
@@ -1722,3 +1741,21 @@ theorem nary_program_function_primrec' (p : Program) (n : Nat) :
     simp [nary_program_function, init_state]
   apply this.symm.subst
   apply program_execution_fn_encode_decode_primrec'
+
+theorem loop_computable_is_primrec' {f : VectNat n → Nat} :
+    loop_computable f → Nat.Primrec' f := by
+  intro ⟨p, p_h⟩
+  have := nary_program_function_primrec' p n
+  exact p_h.symm.substr this
+
+theorem loop_computable_iff_primrec' {f : VectNat n → Nat} :
+    loop_computable f ↔ Nat.Primrec' f :=
+  ⟨loop_computable_is_primrec', primrec'_is_loop_computable⟩
+
+theorem loop_computable_is_computable_cleanly {f : VectNat n → Nat} :
+    loop_computable f → loop_computable_cleanly f :=
+  primrec'_is_loop_computable_cleanly ∘ loop_computable_is_primrec'
+
+theorem loop_computable_iff_loop_computable_cleanly {f : VectNat n → Nat} :
+    loop_computable f ↔ loop_computable_cleanly f :=
+  ⟨loop_computable_is_computable_cleanly, loop_computable_cleanly_is_loop_computable⟩
