@@ -117,3 +117,16 @@ def setup_X_j_to_X_n_plus_j (idx : Nat) (j : Nat) : Nat → Program
 def clear_Z_0_to_Z_n (idx : Nat) : Nat → Program
   | 0 => CLEAR X idx
   | n + 1 => clear_Z_0_to_Z_n idx n ++ CLEAR X (idx + n + 1)
+
+-- Encoding and decoding of VectNat
+def encode_VectNat (n : Nat) : VectNat (n + 1) → Nat := match n with
+  | 0 => Mathlib.Vector.head
+  | n + 1 => fun v => Nat.pair v.head (encode_VectNat n v.tail)
+
+def decode_VectNat (n i : Nat) : VectNat 1 → Nat := match n with
+  | 0 => match i with
+    | 0 => Mathlib.Vector.head
+    | _ + 1 => fun _ => 0
+  | n + 1 => match i with
+    | 0 => fun z => z.head.unpair.1
+    | i + 1 => fun z => decode_VectNat n i ⟨[z.head.unpair.2], rfl⟩

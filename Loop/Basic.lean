@@ -1440,159 +1440,12 @@ theorem primrec_is_loop_computable {f : VectNat n → Nat} :
 
 -- m = max n (highest_var p)
 
--- TODO: move stuff to Defs and Lemmas
-def encodeVect (n : Nat) : VectNat (n + 1) → Nat := match n with
-  | 0 => Vector.head
-  | n + 1 => fun v => Nat.pair v.head (encodeVect n v.tail)
-
-def decodeVect (n i : Nat) : VectNat 1 → Nat := match n with
-  | 0 => match i with
-    | 0 => Vector.head
-    | _ + 1 => fun _ => 0
-  | n + 1 => match i with
-    | 0 => fun z => z.head.unpair.1
-    | i + 1 => fun z => decodeVect n i ⟨[z.head.unpair.2], rfl⟩
-
-theorem decode_primrec' : ∀ n i : Nat, Nat.Primrec' (decodeVect n i) := by
-  intro n
-  induction n
-  case zero =>
-    intro i
-    cases i
-    · exact Nat.Primrec'.head
-    · exact Nat.Primrec'.const 0
-  case succ n n_ih =>
-    intro i
-    cases i
-    case zero =>
-      dsimp [decodeVect]
-      exact Nat.Primrec'.comp₁ (fun z => z.unpair.1)
-        (Nat.Primrec'.unpair₁ Nat.Primrec'.head) Nat.Primrec'.head
-    case succ i =>
-      dsimp [decodeVect]
-      let f : VectNat 1 → Nat := fun z => decodeVect n i ⟨[z.head], rfl⟩
-      have : f = decodeVect n i := by
-        have : ∀ z : VectNat 1, ⟨[z.head], rfl⟩ = z := by
-          intro v
-          let ⟨[x], _⟩ := v
-          dsimp [Vector.head]
-        conv =>
-          lhs
-          dsimp [f]
-          intro z
-          rw [this z]
-      have : Nat.Primrec' f := by rewrite [this]; exact n_ih i
-      exact @Nat.Primrec'.comp₁ (fun z => decodeVect n i ⟨[z], rfl⟩) this
-        1 (fun z => (Nat.unpair z.head).2) (Nat.Primrec'.unpair₂ Nat.Primrec'.head)
-
-theorem decodeVect_encode (n i : Nat) (v : VectNat (n + 1)) :
-    decodeVect n i ⟨[encodeVect n v], rfl⟩
-     = if h : i < n + 1 then v.get ⟨i, h⟩ else 0 := by
-  revert i
-  induction n
-  case zero =>
-    intro i
-    cases i
-    case zero =>
-      let ⟨[x], _⟩ := v
-      dsimp [encodeVect, decodeVect, Vector.head, Vector.get]
-    case succ i =>
-      dsimp [decodeVect]
-  case succ n n_ih =>
-    intro i
-    let ⟨x :: xs, xs_l⟩ := v
-    cases i
-    case zero =>
-      dsimp [decodeVect, encodeVect, Vector.head, Vector.get]
-      rw [Nat.unpair_pair, Prod.fst]
-    case succ i =>
-      dsimp [decodeVect, encodeVect, Vector.head, Vector.tail]
-      rewrite [Nat.unpair_pair]
-      simp at xs_l
-      rewrite [n_ih ⟨xs, xs_l⟩ i]
-      cases (Nat.decLt i (n + 1))
-      case isTrue h =>
-        simp [h]
-        have : (⟨x :: xs, by simp [xs_l]⟩ : VectNat (n + 1 + 1)) = x ::ᵥ ⟨xs, xs_l⟩ := by
-          dsimp [Vector.cons]
-        rewrite [this]
-        have : (⟨i + 1, by simp [h]⟩ : Fin (n + 1 +1)) = (⟨i, h⟩ : Fin (n + 1)).succ := by simp
-        rewrite [this]
-        rw [Vector.get_cons_succ]
-      case isFalse h =>
-        simp [h]
-
-theorem decodeVect_append_encode (n m i : Nat) (v : VectNat (n + 1))
-    (w : VectNat m) (h : i < n + 1) :
-    decodeVect (n + m) i ⟨[encodeVect (n + m) ⟨v.toList.append w.toList, by simp_arith⟩], rfl⟩
-      = v.get ⟨i, h⟩ := by
-  have : i < n + m + 1 := by
-    have : n + 1 ≤ n + m + 1 := by simp_arith
-    exact Nat.le_trans h this
-  rewrite [decodeVect_encode]
-  simp [this]
-  have : ⟨v.toList, v.toList_length⟩ = v := by
-    apply Vector.eq
-    simp
-  rewrite [this.symm]
-  simp [Vector.get]
-  apply List.getElem_append
-
-
-theorem decodeVect_append_encode' (n m i : Nat) (v : VectNat (n + 1))
-    (w : VectNat m) (h : i < n + 1) :
-    decodeVect (n + m) i ⟨[encodeVect (n + m) ⟨v.toList.append w.toList, by simp_arith⟩], rfl⟩
-      = decodeVect n i ⟨[encodeVect n v], rfl⟩ := by
-  rewrite [decodeVect_append_encode n m i v w h]
-  rewrite [decodeVect_encode]
-  simp [h]
-
-theorem decodeVect_encode_value_at (n i : Nat) (v : VectNat (n + 1)) :
-    decodeVect n i ⟨[encodeVect n v], rfl⟩
-     = value_at v.toList i := by
-  rewrite [decodeVect_encode]
-  induction n
-  case zero =>
-    let ⟨[x], _⟩ := v
-    cases Nat.decLt i 1
-    case isTrue h =>
-      have := Nat.lt_one_iff.mp h
-      simp [this, Vector.head, value_at]
-    case isFalse h =>
-      simp [h]
-      rewrite [←Nat.sub_add_cancel (Nat.ge_of_not_lt h)]
-      simp [Vector.head, value_at]
-  case succ n n_ih =>
-    sorry
-
-theorem encodeVect_decode (n z : Nat) :
-    encodeVect n (Vector.ofFn (fun j => decodeVect n j ⟨[z], rfl⟩)) = z := by
-  revert z
-  induction n
-  case zero =>
-    simp [encodeVect, decodeVect, Vector.head, Vector.ofFn]
-  case succ n n_ih =>
-    intro z
-    simp [encodeVect, decodeVect]
-    dsimp [Vector.head]
-    rewrite [n_ih]
-    exact Nat.pair_unpair z
-
-theorem encodeVect_primrec' : ∀ n : Nat, Nat.Primrec' (encodeVect n) := by
-  intro n
-  induction n
-  case zero =>
-    exact Nat.Primrec'.head
-  case succ n n_ih =>
-    exact Nat.Primrec'.comp₂ Nat.pair Nat.Primrec'.natPair Nat.Primrec'.head
-      (Nat.Primrec'.tail n_ih)
-
 -- -- m = max n (highest_var p)
 def inc_value_i_vect (m i : Nat) : Fin (m + 1) → VectNat 1 → Nat :=
-  fun j z => if (i = j) then (decodeVect m i z).succ else decodeVect m j z
+  fun j z => if (i = j) then (decode_VectNat m i z).succ else decode_VectNat m j z
 
 def clear_value_i_vect (m i : Nat) : Fin (m + 1) → VectNat 1 → Nat :=
-  fun j z => if (i = j) then 0 else decodeVect m j z
+  fun j z => if (i = j) then 0 else decode_VectNat m j z
 
 theorem inc_value_i_vect_primrec' (m i : Nat) :
     ∀ j : Fin (m + 1), Nat.Primrec' (inc_value_i_vect m i j) := by
@@ -1634,19 +1487,19 @@ theorem clear_value_i_vect_primrec' (m i : Nat) :
     apply decode_primrec'
 
 def inc_value_i_encode (m i : Nat) : VectNat 1 → Nat :=
-  fun z => encodeVect m (Vector.ofFn fun j => inc_value_i_vect m i j z)
+  fun z => encode_VectNat m (Vector.ofFn fun j => inc_value_i_vect m i j z)
 
 def clear_value_i_encode (m i : Nat) : VectNat 1 → Nat :=
-  fun z => encodeVect m (Vector.ofFn fun j => clear_value_i_vect m i j z)
+  fun z => encode_VectNat m (Vector.ofFn fun j => clear_value_i_vect m i j z)
 
 theorem inc_value_i_encode_primrec' (m i : Nat) :
     Nat.Primrec' (inc_value_i_encode m i) :=
-  Nat.Primrec'.comp (inc_value_i_vect m i) (encodeVect_primrec' m)
+  Nat.Primrec'.comp (inc_value_i_vect m i) (encode_VectNat_primrec' m)
     (inc_value_i_vect_primrec' m i)
 
 theorem clear_value_i_encode_primrec' (m i : Nat) :
     Nat.Primrec' (clear_value_i_encode m i) :=
-  Nat.Primrec'.comp (clear_value_i_vect m i) (encodeVect_primrec' m)
+  Nat.Primrec'.comp (clear_value_i_vect m i) (encode_VectNat_primrec' m)
     (clear_value_i_vect_primrec' m i)
 
 def program_execution_fn (p : Program) (n : Nat) : VectNat 1 → Nat := match p with
@@ -1656,7 +1509,50 @@ def program_execution_fn (p : Program) (n : Nat) : VectNat 1 → Nat := match p 
   | loop_var i inner =>
     let g_inner := fun z : VectNat 2 =>
       z.head.rec (z.tail.head) fun _ IH => program_execution_fn inner n ⟨[IH], rfl⟩
-    fun z => g_inner ⟨[(decodeVect n i z), z.head], rfl⟩
+    fun z => g_inner ⟨[decode_VectNat n i z, z.head], rfl⟩
+
+theorem program_execution_fn_primrec' (p : Program) (n : Nat) :
+    Nat.Primrec' (program_execution_fn p n) := by
+  induction p
+  case clear_var => apply clear_value_i_encode_primrec'
+  case increment_var => apply inc_value_i_encode_primrec'
+  case loop_var i inner inner_ih =>
+    let h : VectNat 3 → Nat := fun z => program_execution_fn inner n ⟨[z.tail.head], rfl⟩
+    let g_inner' : VectNat 2 → Nat := fun z =>
+      z.head.rec (z.tail.head) fun y IH => h (y ::ᵥ IH ::ᵥ z.tail)
+    have h_prec : Nat.Primrec' h :=
+        @Nat.Primrec'.comp 3 _ _
+        (fun _ z => z.tail.head) inner_ih
+        (fun _ => @Nat.Primrec'.tail 2 _ Nat.Primrec'.head)
+    have g_inner'_prec : Nat.Primrec' g_inner' :=
+      Nat.Primrec'.prec Nat.Primrec'.head h_prec
+    let g_inner : VectNat 2 → Nat := fun z =>
+      z.head.rec (z.tail.head) fun _ IH => program_execution_fn inner n ⟨[IH], rfl⟩
+    have : g_inner = g_inner' := by simp [g_inner', h]
+    have : Nat.Primrec' fun z : VectNat 1 => g_inner ⟨[decode_VectNat n i z, z.head], rfl⟩ :=
+      @Nat.Primrec'.comp 1 2 g_inner
+      (fun j => match j with
+        | 0 => fun z => decode_VectNat n i z
+        | 1 => Vector.head)
+      (this.symm.subst g_inner'_prec)
+      (fun j => match j with
+        | 0 => decode_primrec' n i
+        | 1 => Nat.Primrec'.head)
+    exact this
+
+  case seq_execution p p' p_ih p'_ih =>
+    have : Nat.Primrec' fun v : VectNat 1 => program_execution_fn p' n ⟨[v.head], rfl⟩ := by
+      have : (v : VectNat 1) → ⟨[v.head], rfl⟩ = v := by
+        intro v
+        let ⟨[x], _⟩ := v
+        simp [Vector.head]
+      conv =>
+        congr
+        intro v
+        rw [this v]
+      exact p'_ih
+    exact Nat.Primrec'.comp₁ (fun z => program_execution_fn p' n ⟨[z], rfl⟩)
+      this p_ih
 
  -- TODO: construct using program_execution
 -- Question: why is this proof so difficult 1. to formalise and 2. to prove.
@@ -1664,33 +1560,48 @@ def program_execution_fn (p : Program) (n : Nat) : VectNat 1 → Nat := match p 
 theorem decode_program_execution_fn_eq_value_at (p : Program) : ∀ n : Nat, n ≥ highest_var p →
   ∀ v : VectNat (n + 1), ∀ k : Nat,
     value_at (execution_from_state v.toList p) k =
-      decodeVect n k ⟨[program_execution_fn p n ⟨[encodeVect n v], rfl⟩], rfl⟩ := by
+      decode_VectNat n k ⟨[program_execution_fn p n ⟨[encode_VectNat n v], rfl⟩], rfl⟩ := by
   induction p
   case clear_var i =>
-    intro n _ v k
-    dsimp [program_execution_fn]
-    rewrite [clear_value_i_encode, decodeVect_encode]
+    intro n _ _ k
+    simp [program_execution_fn, clear_value_i_encode, decode_VectNat_encode]
     simp [execution_from_state, clear_value_clears_value, clear_value_i_vect]
-    rewrite [decodeVect_encode_value_at]
     cases Nat.decLt k (n + 1)
     case isTrue h =>
       simp [h]
+      rw [decode_VectNat_encode_value_at]
     case isFalse h =>
-      dsimp [h]
-      have := Nat.not_lt.mp h
-      sorry
+      rewrite [←decode_VectNat_encode_value_at]
+      rewrite [decode_VectNat_encode]
+      simp [h]
   case increment_var i =>
-    sorry
+    intro n n_h v k
+    simp [program_execution_fn, inc_value_i_encode, decode_VectNat_encode]
+    simp [execution_from_state, inc_value_increments_value, inc_value_i_vect]
+    cases Nat.decLt k (n + 1)
+    case isTrue h =>
+      simp [h]
+      repeat rewrite [decode_VectNat_encode_value_at]
+      cases Nat.decEq i k with | _ h => simp [h]
+    case isFalse h =>
+      simp [h]
+      repeat rewrite [←decode_VectNat_encode_value_at]
+      repeat rewrite [decode_VectNat_encode]
+      simp [h]
+      simp [highest_var] at n_h
+      have := Nat.lt_of_le_of_lt n_h (Nat.succ_le.mp (Nat.not_lt.mp h))
+      have := Nat.lt_iff_le_and_ne.mp this
+      exact this.right
   case loop_var i inner inner_ih =>
     intro n n_h v k
     simp [execution_from_state]
     let g_inner : VectNat 2 → Nat := fun z =>
       z.head.rec (z.tail.head) fun _ IH => program_execution_fn inner n ⟨[IH], rfl⟩
     have : program_execution_fn (loop_var i inner) n
-        = fun z => g_inner ⟨[(decodeVect n i z), z.head], rfl⟩ := by simp [g_inner, program_execution_fn]
+        = fun z => g_inner ⟨[(decode_VectNat n i z), z.head], rfl⟩ := by simp [g_inner, program_execution_fn]
     rewrite [this]
     simp
-    rewrite [decodeVect_encode_value_at]
+    rewrite [decode_VectNat_encode_value_at]
     generalize value_at v.toList i = a
     dsimp [Vector.head]
     revert k
@@ -1698,31 +1609,116 @@ theorem decode_program_execution_fn_eq_value_at (p : Program) : ∀ n : Nat, n �
     case zero =>
       intros
       simp [loop_n_times, g_inner, Vector.head, Vector.tail]
-      rw [decodeVect_encode_value_at]
+      rw [decode_VectNat_encode_value_at]
     case succ a a_ih =>
       intro k
       rewrite [loop_n_times_loop]
-      sorry
+      let w : VectNat (n + 1) :=
+        Vector.ofFn (fun j => decode_VectNat n j ⟨[g_inner ⟨[a, encode_VectNat n v], rfl⟩], rfl⟩)
+      have : ∀ (k : ℕ), value_at (loop_n_times a (Vector.toList v) inner) k = value_at w.toList k := by
+        intros
+        rewrite [a_ih, ←decode_VectNat_encode_value_at]
+        rw [encode_VectNat_decode]
+      rewrite [same_values_same_execution inner _ w.toList this k]
+      have : n ≥ highest_var inner := by
+        simp [highest_var] at n_h
+        exact n_h.right
+      rewrite [inner_ih n this w k]
+      rewrite [encode_VectNat_decode]
+      simp [g_inner, Vector.head, Vector.tail]
   case seq_execution p p' p_ih p'_ih =>
-
     intro n n_h v k
     dsimp [highest_var] at n_h
-    have n_p_h := Nat.le_trans (Nat.le_max_left _ (highest_var p')) n_h
-    have n_p'_h := Nat.le_trans (Nat.le_max_right (highest_var p) _) n_h
-
-    let f_p_h := p_ih n n_p_h
-    let f_p'_h := p'_ih n n_p'_h
+    let f_p_h := p_ih n (Nat.le_trans (Nat.le_max_left _ (highest_var p')) n_h)
+    let f_p'_h := p'_ih n (Nat.le_trans (Nat.le_max_right (highest_var p) _) n_h)
     simp [program_execution_fn, execution_from_state]
-    let xs := execution_from_state (Vector.toList v) p
-    have xs_l := execution_from_state_long_enough_preserves_length p
-      v (Nat.succ_le_succ_iff.mpr n_p_h)
-    have := f_p_h v
     let w : VectNat (n + 1) :=
-      Vector.ofFn (fun j => decodeVect n j ⟨[program_execution_fn p n ⟨[encodeVect n v], rfl⟩], rfl⟩)
+      Vector.ofFn (fun j => decode_VectNat n j ⟨[program_execution_fn p n ⟨[encode_VectNat n v], rfl⟩], rfl⟩)
     have : ∀ k : Nat, value_at (execution_from_state v.toList p) k = value_at w.toList k := by
-      sorry
-    rewrite [same_values_same_execution p' (execution_from_state v.toList p) w.toList this k]
+      intros
+      rewrite [f_p_h, ←decode_VectNat_encode_value_at]
+      rw [encode_VectNat_decode]
+    rewrite [same_values_same_execution p' _ w.toList this k]
     rewrite [f_p'_h w k]
     repeat apply congr_arg; apply Vector.eq; simp [Vector.head]
     simp [w]
-    rw [encodeVect_decode]
+    rw [encode_VectNat_decode]
+
+def vector_append_zeros (n k : Nat) : VectNat n → VectNat (n + k) :=
+  fun v => v.append ⟨List.zeros k, List.zeros_length ⟩
+
+def program_execution_fn_encode_decode (p : Program) (n k : Nat) :
+  VectNat n → Nat := fun v =>
+    let z := encode_VectNat (n + k) (0 ::ᵥ vector_append_zeros n k v)
+    let z' := program_execution_fn p (n + k) ⟨[z], rfl⟩
+    decode_VectNat (n + k) 0 ⟨[z'], rfl⟩
+
+theorem vector_append_zeros_primrec' (n k : Nat) : Nat.Primrec'.Vec (vector_append_zeros n k) := by
+  intro i
+  dsimp [vector_append_zeros]
+  cases Nat.decLt i n
+  case isTrue h =>
+    conv =>
+      congr
+      intro v
+      simp [Vector.get_eq_get]
+      rewrite [List.getElem_append i (v.toList_length.symm.subst h)]
+    have := @Nat.Primrec'.get n ⟨i, h⟩
+    conv at this =>
+      congr
+      intro v
+      simp [Vector.get_eq_get]
+    assumption
+  case isFalse h =>
+    cases k
+    case zero =>
+      have : i.val < n := i.isLt
+      contradiction
+    case succ k =>
+      have h'' : i.val - n < (List.zeros (k + 1)).length := by
+        rewrite [List.zeros_length]
+        have := i.isLt
+        conv at this =>
+          rhs
+          rw [Nat.add_comm]
+        have := @Nat.sub_lt_sub_right i (k + 1 + n) n (Nat.not_lt.mp h) this
+        rewrite [Nat.add_sub_cancel] at this
+        exact this
+      have : ∀ v : VectNat n, (v.toList ++ List.zeros (k + 1))[i.val] = 0 := by
+        intro v
+        have := @List.getElem_append_right Nat i v.toList (List.zeros (k + 1))
+          (v.toList_length.substr h) (by simp) (v.toList_length.substr h'')
+        rewrite [this]
+        simp
+      conv =>
+        congr
+        intro v
+        simp [Vector.get_eq_get]
+        rewrite [this v]
+      exact Nat.Primrec'.const 0
+
+theorem program_execution_fn_encode_decode_primrec' (p : Program) (n k : Nat) :
+    Nat.Primrec' (program_execution_fn_encode_decode p n k) := by
+  sorry
+
+theorem nary_program_function_primrec' (p : Program) (n : Nat) :
+    Nat.Primrec' ⟦ p ⟧^(n) := by
+  have : ⟦ p ⟧^(n) = program_execution_fn_encode_decode p n (highest_var p - n) := by
+    apply funext
+    intro v
+    simp [program_execution_fn_encode_decode, vector_append_zeros]
+    have : n + (highest_var p - n) ≥ highest_var p := by
+      cases Nat.decLe (highest_var p) n
+      case isTrue h =>
+        rewrite [Nat.sub_eq_zero_iff_le.mpr h]
+        exact h
+      case isFalse h =>
+        rewrite [Nat.add_comm, Nat.sub_add_cancel (Nat.le_of_not_le h)]
+        exact Nat.le_refl _
+    rewrite [←decode_program_execution_fn_eq_value_at p _ this]
+    simp
+    rewrite [←List.cons_append]
+    rewrite [←append_zeros_does_not_change_execution]
+    simp [nary_program_function, init_state]
+  apply this.symm.subst
+  apply program_execution_fn_encode_decode_primrec'

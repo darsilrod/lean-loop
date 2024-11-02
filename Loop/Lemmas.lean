@@ -10,6 +10,7 @@ import Loop.Defs
 
 namespace Loop
 open Program
+open Mathlib (Vector)
 
 theorem init_state_eq : init_state v = 0 :: v.toList := rfl
 
@@ -525,7 +526,7 @@ theorem List.take_n_concat_last_eq (xs : List α) (xs_l : xs.length = n + 1) :
     rewrite [List.cons_inj_right, List.getLast_cons (List.ne_nil_of_length_eq_add_one xs_l)]
     exact n_ih xs xs_l
 
-  def cons_last_construction (v : Mathlib.Vector α (n + 1)) :
+  def cons_last_construction (v : Vector α (n + 1)) :
       (t : α) ×' (xs : List α) ×' (xs.length = n) ×' (v.toList = xs ++ [t]) :=
     let t := v.toList.getLast (List.ne_nil_of_length_eq_add_one v.length_val)
     let xs := v.toList.take n
@@ -681,7 +682,7 @@ theorem lemma_store : ∀ c n : Nat, ∀ w : VectNat c, ∀ v : VectNat (n + 1),
   case zero =>
     intro c w v
     let ⟨[x], xs_l⟩ := v
-    simp [Mathlib.Vector.head, store_X_1_to_X_succ_n, execution_from_state]
+    simp [Vector.head, store_X_1_to_X_succ_n, execution_from_state]
     repeat rewrite [← List.cons_append]
     let ys := 0 :: x :: w.toList
     have : ys.length = c + 2 := by
@@ -696,9 +697,9 @@ theorem lemma_store : ∀ c n : Nat, ∀ w : VectNat c, ∀ v : VectNat (n + 1),
     simp only [store_X_1_to_X_succ_n, concat_eq_seq_execution, execution_from_state]
     rewrite [←List.append_cons _ t]
     have := calc
-          execution_from_state (0 :: xs ++ t :: Mathlib.Vector.toList w ++ List.zeros (n + 1) ++ [0])
+          execution_from_state (0 :: xs ++ t :: Vector.toList w ++ List.zeros (n + 1) ++ [0])
             (store_X_1_to_X_succ_n (n + 1 + c + 2) n)
-      _ = execution_from_state (0 :: xs ++ t :: Mathlib.Vector.toList w ++ List.zeros (n + 1))
+      _ = execution_from_state (0 :: xs ++ t :: Vector.toList w ++ List.zeros (n + 1))
             (store_X_1_to_X_succ_n (n + 1 + c + 2) n) ++ [0] := by
               have l_h : (0 :: xs ++ t :: w.toList ++ List.zeros (n + 1)).length = n + n + c + 4 := by simp_arith [xs_l]
               have : highest_var (store_X_1_to_X_succ_n (n + 1 + c + 2) n) = n + n + c + 3 := by
@@ -719,9 +720,9 @@ theorem lemma_store : ∀ c n : Nat, ∀ w : VectNat c, ∀ v : VectNat (n + 1),
         rewrite [Nat.add_comm c 1, ←Nat.add_assoc] at this
         rw [this]
     rewrite [this]
-    have : (0 :: xs ++ t :: Mathlib.Vector.toList w ++ xs).length = n + 1 + c + 2 + n + 1 := by simp_arith [xs_l]
+    have : (0 :: xs ++ t :: Vector.toList w ++ xs).length = n + 1 + c + 2 + n + 1 := by simp_arith [xs_l]
     rewrite [inc_X_i_X_j_adds_value this]
-    have : value_at (0 :: xs ++ t :: Mathlib.Vector.toList w ++ xs ++ [0]) (n + 2) = t := by
+    have : value_at (0 :: xs ++ t :: Vector.toList w ++ xs ++ [0]) (n + 2) = t := by
       have : 0 :: xs ++ t :: w.toList ++ xs ++ [0] = 0 :: xs ++ t :: (w.toList ++ xs ++ [0]) := by simp
       rewrite [this]
       have : (0 :: xs).length = n + 2 := by simp [xs_l]
@@ -785,7 +786,7 @@ theorem lemma_setup : ∀ c n : Nat, ∀ w : VectNat c, ∀ v : VectNat (n + 1),
         = (execution_from_state (List.zeros (n + 1) ++ 0 :: w.toList ++ xs)
             (setup_X_j_to_X_n_plus_j (n + 1 + c) 0 n)) ++ [t] := by
 
-            have : (List.zeros (n + 1) ++ 0 :: Mathlib.Vector.toList w ++ xs).length
+            have : (List.zeros (n + 1) ++ 0 :: Vector.toList w ++ xs).length
                 ≥ highest_var (setup_X_j_to_X_n_plus_j (n + 1 + c) 0 n) + 1 := by
               simp_arith [xs_l]
               have : highest_var (setup_X_j_to_X_n_plus_j (n + 1 + c) 0 n)
@@ -850,3 +851,160 @@ theorem forall_exists_function {n : Nat} (g : Fin n → VectNat m → Nat)
       suffices h : ⟨n, Nat.lt_succ_self n⟩ = i from by rewrite [h] at p_g_n_h; assumption
       suffices h : n = i.val from Fin.eq_of_val_eq h
       exact Nat.le_antisymm (Nat.ge_of_not_lt h) (Nat.le_of_lt_succ i.2)
+--
+theorem decode_primrec' : ∀ n i : Nat, Nat.Primrec' (decode_VectNat n i) := by
+  intro n
+  induction n
+  case zero =>
+    intro i
+    cases i
+    · exact Nat.Primrec'.head
+    · exact Nat.Primrec'.const 0
+  case succ n n_ih =>
+    intro i
+    cases i
+    case zero =>
+      dsimp [decode_VectNat]
+      exact Nat.Primrec'.comp₁ (fun z => z.unpair.1)
+        (Nat.Primrec'.unpair₁ Nat.Primrec'.head) Nat.Primrec'.head
+    case succ i =>
+      dsimp [decode_VectNat]
+      let f : VectNat 1 → Nat := fun z => decode_VectNat n i ⟨[z.head], rfl⟩
+      have : f = decode_VectNat n i := by
+        have : ∀ z : VectNat 1, ⟨[z.head], rfl⟩ = z := by
+          intro v
+          let ⟨[x], _⟩ := v
+          dsimp [Vector.head]
+        conv =>
+          lhs
+          dsimp [f]
+          intro z
+          rw [this z]
+      have : Nat.Primrec' f := by rewrite [this]; exact n_ih i
+      exact @Nat.Primrec'.comp₁ (fun z => decode_VectNat n i ⟨[z], rfl⟩) this
+        1 (fun z => (Nat.unpair z.head).2) (Nat.Primrec'.unpair₂ Nat.Primrec'.head)
+
+theorem encode_VectNat_primrec' : ∀ n : Nat, Nat.Primrec' (encode_VectNat n) := by
+  intro n
+  induction n
+  case zero =>
+    exact Nat.Primrec'.head
+  case succ n n_ih =>
+    exact Nat.Primrec'.comp₂ Nat.pair Nat.Primrec'.natPair Nat.Primrec'.head
+      (Nat.Primrec'.tail n_ih)
+
+theorem encode_VectNat_decode (n z : Nat) :
+    encode_VectNat n (Vector.ofFn (fun j => decode_VectNat n j ⟨[z], rfl⟩)) = z := by
+  revert z
+  induction n
+  case zero =>
+    simp [encode_VectNat, decode_VectNat, Vector.head, Vector.ofFn]
+  case succ n n_ih =>
+    intros
+    simp [encode_VectNat, decode_VectNat, Vector.head]
+    rewrite [n_ih]
+    exact Nat.pair_unpair _
+
+theorem decode_VectNat_encode (n i : Nat) (v : VectNat (n + 1)) :
+    decode_VectNat n i ⟨[encode_VectNat n v], rfl⟩
+     = if h : i < n + 1 then v.get ⟨i, h⟩ else 0 := by
+  revert i
+  induction n
+  case zero =>
+    intro i
+    cases i
+    case zero =>
+      let ⟨[x], _⟩ := v
+      dsimp [encode_VectNat, decode_VectNat, Vector.head, Mathlib.Vector.get]
+    case succ i =>
+      dsimp [decode_VectNat]
+  case succ n n_ih =>
+    intro i
+    let ⟨x :: xs, xs_l⟩ := v
+    cases i
+    case zero =>
+      dsimp [decode_VectNat, encode_VectNat, Vector.head, Mathlib.Vector.get]
+      rw [Nat.unpair_pair, Prod.fst]
+    case succ i =>
+      dsimp [decode_VectNat, encode_VectNat, Vector.head, Mathlib.Vector.tail]
+      rewrite [Nat.unpair_pair]
+      simp at xs_l
+      rewrite [n_ih ⟨xs, xs_l⟩ i]
+      cases (Nat.decLt i (n + 1))
+      case isTrue h =>
+        simp [h]
+        have : (⟨x :: xs, by simp [xs_l]⟩ : VectNat (n + 1 + 1)) = x ::ᵥ ⟨xs, xs_l⟩ := by
+          dsimp [Vector.cons]
+        rewrite [this]
+        have : (⟨i + 1, by simp [h]⟩ : Fin (n + 1 +1)) = (⟨i, h⟩ : Fin (n + 1)).succ := by simp
+        rewrite [this]
+        rw [Vector.get_cons_succ]
+      case isFalse h =>
+        simp [h]
+
+theorem decode_VectNat_encode_value_at (n i : Nat) (v : VectNat (n + 1)) :
+    decode_VectNat n i ⟨[encode_VectNat n v], rfl⟩
+     = value_at v.toList i := by
+  rewrite [decode_VectNat_encode]
+  revert i
+  induction n
+  case zero =>
+    intro i
+    let ⟨[x], _⟩ := v
+    cases Nat.decLt i 1
+    case isTrue h =>
+      have := Nat.lt_one_iff.mp h
+      simp [this, Vector.head, value_at]
+    case isFalse h =>
+      simp [h]
+      rewrite [←Nat.sub_add_cancel (Nat.ge_of_not_lt h)]
+      simp [Vector.head, value_at]
+  case succ n n_ih =>
+    intro i
+    let ⟨x :: xs, xs_l⟩ := v
+    simp at xs_l
+    cases i
+    case zero =>
+      simp [Vector.head, value_at]
+    case succ i =>
+      simp
+      let v' : VectNat (n + 1) := ⟨xs, xs_l⟩
+      rewrite [value_at_cons_succ]
+      have : xs = v'.toList := by dsimp [v']
+      conv =>
+        rhs
+        rewrite [this]
+        rfl
+      have : ⟨x :: xs, by simp [xs_l]⟩ = x ::ᵥ v' := by simp [v', Vector.cons]
+      rewrite [this]
+      have : (h : i < n + 1) → (⟨i, h⟩ : Fin (n + 1)).succ = ⟨i + 1, by simp [h]⟩ := by simp
+      conv =>
+        lhs
+        congr
+        intro h
+        rw [←this h, Vector.get_cons_succ]
+      apply n_ih
+
+-- theorem decode_VectNat_append_encode (n m i : Nat) (v : VectNat (n + 1))
+--     (w : VectNat m) (h : i < n + 1) :
+--     decode_VectNat (n + m) i ⟨[encode_VectNat (n + m) ⟨v.toList.append w.toList, by simp_arith⟩], rfl⟩
+--       = v.get ⟨i, h⟩ := by
+--   have : i < n + m + 1 := by
+--     have : n + 1 ≤ n + m + 1 := by simp_arith
+--     exact Nat.le_trans h this
+--   rewrite [decode_VectNat_encode]
+--   simp [this]
+--   have : ⟨v.toList, v.toList_length⟩ = v := by
+--     apply Vector.eq
+--     simp
+--   rewrite [this.symm]
+--   simp [Vector.get]
+--   apply List.getElem_append
+
+-- theorem decode_VectNat_append_encode' (n m i : Nat) (v : VectNat (n + 1))
+--     (w : VectNat m) (h : i < n + 1) :
+--     decode_VectNat (n + m) i ⟨[encode_VectNat (n + m) ⟨v.toList.append w.toList, by simp_arith⟩], rfl⟩
+--       = decode_VectNat n i ⟨[encode_VectNat n v], rfl⟩ := by
+--   rewrite [decode_VectNat_append_encode n m i v w h]
+--   rewrite [decode_VectNat_encode]
+--   simp [h]
