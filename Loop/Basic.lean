@@ -925,7 +925,6 @@ def offset_comp_lemma (m : Nat) (p_g : Fin (n + 1) → Program) (p_f : Program) 
   apply max_le_lemma (Nat.le_refl (highest_var p_f)) ?_
   simp [highest_var_p_g]
 
--- TODO: review
 def highest_var_compute_store_all_succ_n_g_lemma (n m k : Nat) (p_g : Fin (n + 1) → Program) (p_f : Program)
     : ∀ x : Nat, x ≥ offset_comp m p_g p_f →
       highest_var (compute_store_all_succ_n_g n m p_g p_f (x + k))
@@ -936,28 +935,21 @@ def highest_var_compute_store_all_succ_n_g_lemma (n m k : Nat) (p_g : Fin (n + 1
     intro k p_g x x_h
     dsimp [compute_store_all_succ_n_g, compute_store_g_i, highest_var]
     repeat rw [Nat.max_zero, Nat.zero_max]
-    have h' : highest_var (p_g 0) ≤ highest_var_p_g p_g := highest_var_p_g_ge_highest_var_p_g_i 0
-    have : highest_var_p_g p_g ≤ offset_comp m p_g p_f := by simp [offset_comp]
-    have := Nat.le_trans h' this
-    have h' := Nat.le_trans this x_h
-    have := @Nat.le_add_right_of_le _ _ 1 h'
-    rw [Nat.max_eq_right this]
+    have : highest_var (p_g 0) ≤ highest_var_p_g p_g := highest_var_p_g_ge_highest_var_p_g_i 0
+    have := Nat.le_trans this (highest_var_p_g_le_offset_comp m p_g p_f)
+    have := Nat.le_trans this x_h
+    rw [Nat.max_eq_right (Nat.le_add_right_of_le this)]
     rw [Nat.add_assoc]
-    have := @Nat.le_add_right_of_le _ _ (k + 1) h'
-    rw [Nat.max_eq_right this]
+    rw [Nat.max_eq_right (Nat.le_add_right_of_le this)]
     rw [Nat.add_comm k 1, Nat.add_assoc]
   case succ n n_ih =>
     intro k p_g x x_h
     dsimp [compute_store_all_succ_n_g, compute_store_g_i, highest_var]
     repeat rw [Nat.max_zero, Nat.zero_max]
-    have h' : highest_var (p_g 0) ≤ highest_var_p_g p_g := highest_var_p_g_ge_highest_var_p_g_i 0
-    have : highest_var_p_g p_g ≤ offset_comp m p_g p_f := by simp [offset_comp]
-    have := Nat.le_trans h' this
-    have h' := Nat.le_trans this x_h
-    have := @Nat.le_add_right_of_le _ _ 1 h'
-    rw [Nat.max_eq_right this]
-    have := @Nat.le_add_right_of_le _ _ (k + 1) h'
-    rw [Nat.add_assoc x, Nat.max_eq_right this]
+    have : highest_var (p_g 0) ≤ highest_var_p_g p_g := highest_var_p_g_ge_highest_var_p_g_i 0
+    have := Nat.le_trans (Nat.le_trans this (highest_var_p_g_le_offset_comp m p_g p_f)) x_h
+    rw [Nat.max_eq_right (Nat.le_add_right_of_le this)]
+    rw [Nat.add_assoc x, Nat.max_eq_right (Nat.le_add_right_of_le this)]
     rw [Nat.add_comm k 1, ←Nat.add_assoc]
 
     suffices h : highest_var (compute_store_all_succ_n_g n m (fun i ↦ p_g i.succ) p_f (x + 1 + k))
@@ -966,14 +958,12 @@ def highest_var_compute_store_all_succ_n_g_lemma (n m k : Nat) (p_g : Fin (n + 1
       generalize highest_var (compute_store_all_succ_n_g n m (fun i ↦ p_g i.succ) p_f (x + 1)) = t
       apply Nat.add_max_add_right
     rw [Nat.add_assoc]
-    have : offset_comp m p_g p_f ≥ offset_comp m (fun i => p_g i.succ) p_f := offset_comp_lemma _ _ _
-    have h'' := Nat.le_trans this x_h
-    rw [n_ih (1 + k) (fun i => p_g i.succ) x h'']
+    have : offset_comp m (fun i => p_g i.succ) p_f ≤ x := Nat.le_trans (offset_comp_lemma _ _ _) x_h
+    rw [n_ih (1 + k) (fun i => p_g i.succ) x this]
     rw [←Nat.add_assoc]
-    rw [n_ih 1 (fun i => p_g i.succ) x h'' ]
+    rw [n_ih 1 (fun i => p_g i.succ) x this]
 
 
--- TODO: review
 def highest_var_compute_store_all_succ_n_g (n m : Nat) (p_g : Fin (n + 1) → Program) (p_f : Program)
     : highest_var (compute_store_all_succ_n_g n m p_g p_f (offset_comp m p_g p_f + m))
       = offset_comp m p_g p_f + m + (n + 1) := by
@@ -1001,11 +991,9 @@ def highest_var_compute_store_all_succ_n_g (n m : Nat) (p_g : Fin (n + 1) → Pr
     rw [Nat.zero_max, Nat.max_zero]
     have := Nat.le_trans (highest_var_p_g_le_offset_comp m p_g p_f) x_h
     have := Nat.le_trans (@highest_var_p_g_ge_highest_var_p_g_i _ p_g 0) this
-    have := @Nat.le_add_right_of_le _ _ 1 this
-    rw [Nat.max_eq_right this]
+    rw [Nat.max_eq_right (Nat.le_add_right_of_le this)]
     have : offset_comp m (fun i => p_g i.succ) p_f ≤ x := Nat.le_trans (offset_comp_lemma m p_g p_f) x_h
-    have := n_ih (fun i => p_g i.succ) (x + 1) (Nat.le_trans this (Nat.le_succ x))
-    rw [this]
+    rw [n_ih (fun i => p_g i.succ) (x + 1) (Nat.le_trans this (Nat.le_succ x))]
     rw [Nat.max_eq_right] <;> simp_arith
 
 -- TODO: review
@@ -1022,12 +1010,11 @@ def highest_var_comp_program (g : Fin n → VectNat m → Nat) (f_h : cleanly_co
       dsimp [comp_program, highest_var]
       rw [highest_var_store, highest_var_clear, highest_var_setup,
         highest_var_clear_Z]
+      -- TODO: simplify
       have : max (m + 1) (offset_comp (m + 1) p_g p_f + 1 + m)
           = offset_comp (m + 1) p_g p_f + 1 + m := by
-        have : m + 1 ≤ offset_comp (m + 1) p_g p_f := by simp [offset_comp]
-        have := @Nat.le_add_right_of_le _ _ (1 + m) this
-        rw [←Nat.add_assoc] at this
-        exact Nat.max_eq_right this
+        rw [Nat.add_assoc]
+        exact Nat.max_eq_right (Nat.le_add_right_of_le (m_le_offset_comp (m + 1) p_g p_f))
       rw [Nat.max_comm _ (m + 1)]
       rw [this, this]
       conv =>
@@ -1040,12 +1027,11 @@ def highest_var_comp_program (g : Fin n → VectNat m → Nat) (f_h : cleanly_co
         rfl
       rw [←Nat.add_assoc]
       rw [this]
+      -- TODO: simplify
       have : max (offset_comp (m + 1) p_g p_f + 1 + m) (highest_var p_f)
           = offset_comp (m + 1) p_g p_f + 1 + m := by
-        have : highest_var p_f ≤ offset_comp (m + 1) p_g p_f := by simp [offset_comp]
-        have := @Nat.le_add_right_of_le _ _ (1 + m) this
-        rw [←Nat.add_assoc] at this
-        exact Nat.max_eq_left this
+        rw [Nat.add_assoc]
+        exact Nat.max_eq_left (Nat.le_add_right_of_le (highest_var_p_f_le_offset_comp (m + 1) p_g p_f))
 
       rw [this]
       rw [Nat.max_self, Nat.max_self, Nat.add_comm m 1, ←Nat.add_assoc]
@@ -1088,13 +1074,11 @@ def highest_var_comp_program (g : Fin n → VectNat m → Nat) (f_h : cleanly_co
       rw [Nat.add_assoc _ 1 n, Nat.add_comm 1 n, Nat.add_assoc _ _ (n + 1),
         Nat.add_comm (m + 1) (n + 1), ←Nat.add_assoc _ (n + 1)]
       rw [Nat.max_self]
+      -- TODO: simplify
       have : max (offset_comp (m + 1) p_g p_f + (n + 1) + (m + 1)) (highest_var p_f)
           = offset_comp (m + 1) p_g p_f + (n + 1) + (m + 1) := by
-        have : highest_var p_f ≤ offset_comp (m + 1) p_g p_f := by simp [offset_comp]
-        have h := @Nat.le_add_right_of_le _ _ ((n + 1) + (m + 1)) this
-        have : n + 1 + (m + 1) = (n + 1) + (m + 1) := by simp_arith
-        rw [this, ←Nat.add_assoc] at h
-        exact Nat.max_eq_left h
+        rw [Nat.add_assoc]
+        exact Nat.max_eq_left (Nat.le_add_right_of_le (highest_var_p_f_le_offset_comp (m + 1) p_g p_f))
       rw [this, Nat.max_comm _ (n + 1)]
       rw [Nat.add_assoc _ (n + 1), Nat.add_comm (n + 1) _, ←Nat.add_assoc _ _ (n + 1)]
       rw [l]
@@ -1168,6 +1152,7 @@ theorem comp_is_loop_computable_cleanly (g : Fin n → VectNat m → Nat) :
 end comp_is_loop_computable_cleanly_proof
 
 
+-- TODO: make program explicit
 theorem primrec'_is_loop_computable_cleanly : Nat.Primrec' f → loop_computable_cleanly f := by
   intro h
   induction h
@@ -1177,6 +1162,7 @@ theorem primrec'_is_loop_computable_cleanly : Nat.Primrec' f → loop_computable
   case comp g _ _ f_ih g_ih => exact comp_is_loop_computable_cleanly g f_ih g_ih
   case prec f_ih g_ih => exact prec_is_loop_computable_cleanly f_ih g_ih
 
+-- TODO: make shorter
 theorem primrec'_is_loop_computable {f : VectNat n → Nat} :
     Nat.Primrec' f → loop_computable f := by
   intro h
