@@ -17,8 +17,6 @@ programming language, define what Loop-computable functions are, and prove that
 Loop-computable is the same as primitive recursive.
 -/
 
--- TODO: make constructive version
-
 namespace Loop
 
 open Program
@@ -239,18 +237,12 @@ theorem execution_from_state_prec_program_1_1 (v : VectNat (n + 1)) :
     execution_from_state (0 :: v.toList ++ 0 :: List.zeros (offset_pr f_h g_h - (n + 2)) ++  0 :: List.zeros n)
       (store_X_1_to_X_succ_n (offset_pr f_h g_h + 1) n)
       = 0 :: v.toList ++ 0 :: List.zeros (offset_pr f_h g_h - (n + 2)) ++ v.toList := by
-  let c := offset_pr f_h g_h - (n + 2)
-  have : offset_pr f_h g_h + 1 = c + n + 3 := by
-    rw [Nat.succ_inj, Nat.add_assoc]
+  have : offset_pr f_h g_h + 1 = n + (offset_pr f_h g_h - (n + 2) + 1) + 2 := by
+    simp_arith
+    rw [Nat.add_comm n, Nat.add_assoc]
     rw [Nat.sub_add_cancel (n_plus_two_le_offset_pr f_h g_h)]
-  rw [this]
-  let w := 0 :: List.zeros c
-  have l := lemma_store (c + 1) n ⟨w, by simp [w]⟩ v
-  have : n + (c + 1) + 2 = c + n + 3 := by simp_arith
-  dsimp [w] at l
-  rw [this, List.zeros_succ] at l
-  repeat rw [←List.cons_append] at l
-  rw [l]
+  erw [this, lemma_store _ n ⟨0 :: List.zeros _, by simp⟩ v]
+  rfl
 
 theorem execution_from_state_prec_program_1_2 (v : VectNat (n + 1)) :
     execution_from_state (0 :: v.toList ++ 0 :: List.zeros (offset_pr f_h g_h - (n + 2)) ++ v.toList) (clear_X_j_to_X_n_plus_j 1 n)
@@ -273,8 +265,7 @@ theorem execution_from_state_prec_program_1_3 (v : VectNat (n + 1)) :
     rw [←List.zeros_succ, ←List.zeros_succ]
     rw [Nat.sub_add_cancel (n_plus_two_le_offset_pr f_h g_h)]
     have : 0 :: List.zeros (offset_pr f_h g_h) = [0] ++ List.zeros (offset_pr f_h g_h) := rfl
-    rw [this]
-    erw [←@init_state_eq 0 Vector.nil]
+    erw [this, ←@init_state_eq 0 Vector.nil]
     rw [cleanly_computable_append_zeros_append_xs f_h _ _ (highest_var_p_f_le_offset_pr f_h g_h)]
     simp
 
@@ -286,8 +277,8 @@ theorem execution_from_state_prec_program_1_3 (v : VectNat (n + 1)) :
     rw [List.zeros_concat, ←List.cons_append, List.append_assoc _ [0]]
     rw [List.append_cons, List.append_assoc _ _ [x]]
     have : n + (offset_pr f_h g_h - n) + 1 = offset_pr f_h g_h + 1 := by
-      have := Nat.le_trans ((Nat.le_refl n).step.step.step) (n_plus_two_le_offset_pr f_h g_h)
-      rw [Nat.succ_inj, Nat.add_comm, Nat.sub_add_cancel this]
+      have := Nat.le_trans n.le_refl.step.step.step (n_plus_two_le_offset_pr f_h g_h)
+      rw [Nat.add_comm n, Nat.sub_add_cancel this]
     rw [←this]
     have : ([0] ++ 0 :: List.zeros (offset_pr f_h g_h - (n + 1 + 2)) ++ [x]).length
         = offset_pr f_h g_h - n := by
@@ -334,8 +325,7 @@ theorem execution_from_state_prec_program_2_1 (R k : Nat) (v : VectNat (n + 1)) 
       execution_from_state (R :: k :: 0 :: v.tail.toList ++ List.zeros (offset_pr f_h g_h - (n + 2)) ++ v.toList) (X 2 += X 0)
     = execution_from_state ([R, k] ++ 0 :: (v.tail.toList ++ List.zeros (offset_pr f_h g_h - (n + 2)) ++ v.toList)) (X 2 += X 0) := by simp
   _ = R :: k :: R :: v.tail.toList ++ List.zeros (offset_pr f_h g_h - (n + 2)) ++ v.toList := by
-      have : [R, k].length = 2 := rfl
-      rw [inc_X_i_X_j_adds_value this]
+      rw [inc_X_i_X_j_adds_value (by rfl)]
       simp [value_at]
 
 theorem execution_from_state_prec_program_2_2 (R k : Nat) (v : VectNat (n + 1)) :
@@ -996,7 +986,6 @@ def highest_var_compute_store_all_succ_n_g (n m : Nat) (p_g : Fin (n + 1) → Pr
     rw [n_ih (fun i => p_g i.succ) (x + 1) (Nat.le_trans this (Nat.le_succ x))]
     rw [Nat.max_eq_right] <;> simp_arith
 
--- TODO: review
 def highest_var_comp_program (g : Fin n → VectNat m → Nat) (f_h : cleanly_computes p_f f) (p_g : Fin n → Program)
     (g_h : ∀ i, cleanly_computes (p_g i) (g i)) :
       highest_var (comp_program g f_h p_g g_h) = offset_comp m p_g p_f + m + n := by
@@ -1010,7 +999,6 @@ def highest_var_comp_program (g : Fin n → VectNat m → Nat) (f_h : cleanly_co
       dsimp [comp_program, highest_var]
       rw [highest_var_store, highest_var_clear, highest_var_setup,
         highest_var_clear_Z]
-      -- TODO: simplify
       have : max (m + 1) (offset_comp (m + 1) p_g p_f + 1 + m)
           = offset_comp (m + 1) p_g p_f + 1 + m := by
         rw [Nat.add_assoc]
@@ -1027,7 +1015,6 @@ def highest_var_comp_program (g : Fin n → VectNat m → Nat) (f_h : cleanly_co
         rfl
       rw [←Nat.add_assoc]
       rw [this]
-      -- TODO: simplify
       have : max (offset_comp (m + 1) p_g p_f + 1 + m) (highest_var p_f)
           = offset_comp (m + 1) p_g p_f + 1 + m := by
         rw [Nat.add_assoc]
@@ -1074,7 +1061,6 @@ def highest_var_comp_program (g : Fin n → VectNat m → Nat) (f_h : cleanly_co
       rw [Nat.add_assoc _ 1 n, Nat.add_comm 1 n, Nat.add_assoc _ _ (n + 1),
         Nat.add_comm (m + 1) (n + 1), ←Nat.add_assoc _ (n + 1)]
       rw [Nat.max_self]
-      -- TODO: simplify
       have : max (offset_comp (m + 1) p_g p_f + (n + 1) + (m + 1)) (highest_var p_f)
           = offset_comp (m + 1) p_g p_f + (n + 1) + (m + 1) := by
         rw [Nat.add_assoc]
@@ -1151,8 +1137,6 @@ theorem comp_is_loop_computable_cleanly (g : Fin n → VectNat m → Nat) :
 
 end comp_is_loop_computable_cleanly_proof
 
-
--- TODO: make program explicit
 theorem primrec'_is_loop_computable_cleanly : Nat.Primrec' f → loop_computable_cleanly f := by
   intro h
   induction h
@@ -1162,13 +1146,10 @@ theorem primrec'_is_loop_computable_cleanly : Nat.Primrec' f → loop_computable
   case comp g _ _ f_ih g_ih => exact comp_is_loop_computable_cleanly g f_ih g_ih
   case prec f_ih g_ih => exact prec_is_loop_computable_cleanly f_ih g_ih
 
--- TODO: make shorter
 theorem primrec'_is_loop_computable {f : VectNat n → Nat} :
     Nat.Primrec' f → loop_computable f := by
-  intro h
-  have := primrec'_is_loop_computable_cleanly h
-  have := loop_computable_cleanly_is_loop_computable this
-  assumption
+  exact loop_computable_cleanly_is_loop_computable (f := f)
+    ∘ primrec'_is_loop_computable_cleanly
 
 --
 
@@ -1252,16 +1233,15 @@ theorem program_execution_fn_primrec' (p : Program) (n : Nat) :
     let g_inner' : VectNat 2 → Nat := fun z =>
       z.head.rec (z.tail.head) fun y IH => h (y ::ᵥ IH ::ᵥ z.tail)
     have h_prec : Nat.Primrec' h :=
-        @Nat.Primrec'.comp 3 _ _
-        (fun _ z => z.tail.head) inner_ih
-        (fun _ => @Nat.Primrec'.tail 2 _ Nat.Primrec'.head)
+        Nat.Primrec'.comp (m := 3)
+        _ inner_ih (fun _ => @Nat.Primrec'.tail 2 _ Nat.Primrec'.head)
     have g_inner'_prec : Nat.Primrec' g_inner' :=
       Nat.Primrec'.prec Nat.Primrec'.head h_prec
     let g_inner : VectNat 2 → Nat := fun z =>
       z.head.rec (z.tail.head) fun _ IH => program_execution_fn inner n ⟨[IH], rfl⟩
     have : g_inner = g_inner' := by simp [g_inner', h]
     exact
-      @Nat.Primrec'.comp _ _ g_inner
+      Nat.Primrec'.comp (n := 2)
       (fun j => match j with
         | 0 => fun z => decode_VectNat n i z
         | 1 => Vector.head)
@@ -1408,9 +1388,7 @@ theorem vector_append_zeros_primrec' (n k : Nat) : Nat.Primrec'.Vec (vector_init
       assumption
     case isFalse h =>
       cases k
-      case zero =>
-        have : j.val < n := j.isLt
-        contradiction
+      case zero => have : j.val < n := j.isLt; contradiction
       case succ k _ =>
         have h'' : j.val - n < (List.zeros (k + 1)).length := by
           rw [List.zeros_length]
